@@ -8,7 +8,7 @@
 /*
  * The HAL reports DTB_HAL\DTB0000 instead of the ACPI PDO when the firmware
  * gave no ACPI tables. This driver takes that PDO and reports the devices
- * the device tree describes, for now the PCI Express host bridge.
+ * the device tree describes, the PCI Express host bridge and SoC USB hosts.
  */
 
 /* INCLUDES ******************************************************************/
@@ -219,6 +219,8 @@ DtbFdoQueryBusRelations(
     ULONG Count, PreviousCount;
     NTSTATUS Status;
 
+    ULONG i;
+
     if (!FdoExtension->HostBridge)
     {
         Status = DtbCreateHostBridge(DeviceObject->DriverObject, &FdoExtension->HostBridge);
@@ -226,10 +228,18 @@ DtbFdoQueryBusRelations(
             DPRINT1("DTB: no PCI host bridge PDO, 0x%lx\n", Status);
     }
 
+    if (!FdoExtension->PlatformEnumerated)
+    {
+        FdoExtension->PlatformCount = DtbCreatePlatformDevices(DeviceObject->DriverObject,
+                                                               FdoExtension->Platform,
+                                                               RTL_NUMBER_OF(FdoExtension->Platform));
+        FdoExtension->PlatformEnumerated = TRUE;
+    }
+
     /* Keep whatever a filter above already reported */
     Previous = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
     PreviousCount = Previous ? Previous->Count : 0;
-    Count = PreviousCount + (FdoExtension->HostBridge ? 1 : 0);
+    Count = PreviousCount + (FdoExtension->HostBridge ? 1 : 0) + FdoExtension->PlatformCount;
 
     Relations = ExAllocatePoolWithTag(PagedPool,
                                       FIELD_OFFSET(DEVICE_RELATIONS, Objects[Count ? Count : 1]),
@@ -240,10 +250,16 @@ DtbFdoQueryBusRelations(
     Relations->Count = Count;
     if (PreviousCount)
         RtlCopyMemory(Relations->Objects, Previous->Objects, PreviousCount * sizeof(PDEVICE_OBJECT));
+    Count = PreviousCount;
     if (FdoExtension->HostBridge)
     {
         ObReferenceObject(FdoExtension->HostBridge);
-        Relations->Objects[PreviousCount] = FdoExtension->HostBridge;
+        Relations->Objects[Count++] = FdoExtension->HostBridge;
+    }
+    for (i = 0; i < FdoExtension->PlatformCount; i++)
+    {
+        ObReferenceObject(FdoExtension->Platform[i]);
+        Relations->Objects[Count++] = FdoExtension->Platform[i];
     }
 
     if (Previous)
@@ -316,6 +332,8 @@ DtbDispatchPnp(
 
     if (Common->Type == DtbFdo)
         return DtbFdoPnp(DeviceObject, Irp);
+    if (Common->Type == DtbPlatformPdo)
+        return DtbPlatformPnp(DeviceObject, Irp);
 
     return DtbHostBridgePnp(DeviceObject, Irp);
 }
