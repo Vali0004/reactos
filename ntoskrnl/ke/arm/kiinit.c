@@ -61,13 +61,7 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
     /* Check if this is the Boot CPU */
     if (!Number)
     {
-        /* Setup the unexpected interrupt */
-        KxUnexpectedInterrupt.DispatchAddress = KiUnexpectedInterrupt;
-        for (i = 0; i < 4; i++)
-        {
-            /* Copy the template code */
-            KxUnexpectedInterrupt.DispatchCode[i] = ((PULONG)KiInterruptTemplate)[i];
-        }
+        /* KiArmInterruptTrap reports vectors without an interrupt object itself */
 
         /* Set DMA coherency */
         KiDmaIoCoherency = 0;
@@ -279,20 +273,14 @@ KiInitializePcr(IN ULONG ProcessorNumber,
     /* Set processor information */
     //Pcr->ProcessorId = KeArmIdCodeRegisterGet().AsUlong;
 
-    /* Set all interrupt routines to unexpected interrupts as well */
-    for (i = 0; i < MAXIMUM_VECTOR; i++)
-    {
-        /* Point to the same template */
-        Pcr->Idt[i] = (PVOID)&KxUnexpectedInterrupt.DispatchCode;
-    }
+    /* Idt holds the interrupt objects, the software vectors are dispatched by number */
+    for (i = 0; i < RTL_NUMBER_OF(Pcr->Idt); i++)
+        Pcr->Idt[i] = NULL;
 
     /* Set default stall factor */
     Pcr->StallScaleFactor = 50;
 
     /* Setup software interrupts */
-    Pcr->Idt[PASSIVE_LEVEL] = KiPassiveRelease;
-    Pcr->Idt[APC_LEVEL] = KiApcInterrupt;
-    Pcr->Idt[DISPATCH_LEVEL] = KiDispatchInterrupt;
 #if 0
     Pcr->ReservedVectors = (1 << PASSIVE_LEVEL) |
                            (1 << APC_LEVEL) |

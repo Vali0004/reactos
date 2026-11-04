@@ -216,7 +216,12 @@
                 (((x)->u.Subsect.SubsectionAddressHigh << 7) |      \
                   (x)->u.Subsect.SubsectionAddressLow << 3))
 
-/* Mirrors a software PDE into the 4 first level entries of its range, mm/arm/page.c */
+/* mm/arm/procsup.c */
+VOID
+MiArchDeleteProcessAddressSpace(
+    _In_ PEPROCESS Process);
+
+/* Mirrors a software PDE into the 4 first level entries of its range, mm/arm/l1.c */
 VOID
 NTAPI
 MiArmSyncL1(

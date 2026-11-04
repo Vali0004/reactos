@@ -209,3 +209,18 @@ NtSetLdtEntries(IN ULONG Selector1,
     //
     return STATUS_NOT_IMPLEMENTED;
 }
+
+/**
+ * @brief Hands the kernel debugger to another processor.
+ *
+ * Only the boot processor runs on ARM so far, the debugger stays where it is.
+ */
+KCONTINUE_STATUS
+NTAPI
+KxSwitchKdProcessor(
+    _In_ ULONG ProcessorIndex)
+{
+    ASSERT(ProcessorIndex == 0);
+    UNREFERENCED_PARAMETER(ProcessorIndex);
+    return ContinueSuccess;
+}

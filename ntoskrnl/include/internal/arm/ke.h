@@ -9,7 +9,10 @@ FORCEINLINE
 ULONG64
 KxQueryProcessorCycleTime(VOID)
 {
-    return _MoveFromCoprocessor64(15, 1, 14);
+    ULONG Low, High;
+
+    __asm__ __volatile__("mrrc p15, 1, %0, %1, c14" : "=r" (Low), "=r" (High));
+    return ((ULONG64)High << 32) | Low;
 }
 
 DECLSPEC_NORETURN

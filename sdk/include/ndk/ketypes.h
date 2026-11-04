@@ -2246,6 +2246,12 @@ typedef struct _KPROCESS
     UCHAR Iopl;
     UCHAR Unused;
 #endif
+#if defined(_M_ARM)
+    /* ReactOS only, the 16KB first level table TTBR0 points at and its mappings */
+    ULONG_PTR FirstLevelTable;
+    PVOID FirstLevelTableVa;
+    PVOID FirstLevelTableMapVa;
+#endif
     volatile KAFFINITY ActiveProcessors;
     ULONG KernelTime;
     ULONG UserTime;

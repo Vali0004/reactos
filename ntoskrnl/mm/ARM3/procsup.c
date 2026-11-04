@@ -1479,6 +1479,11 @@ MmDeleteProcessAddressSpace(IN PEPROCESS Process)
     /* Drop a reference on the session */
     if (Process->Session) MiReleaseProcessReferenceToSessionDataPage(Process->Session);
 
+#ifdef _M_ARM
+    /* the first level table lives beside the directory */
+    MiArchDeleteProcessAddressSpace(Process);
+#endif
+
     /* Clear out the PDE pages */
     Process->Pcb.DirectoryTableBase[0] = 0;
     Process->Pcb.DirectoryTableBase[1] = 0;
