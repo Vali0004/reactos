@@ -422,6 +422,14 @@ USBPORT_GetSetConfigSpaceData(IN PDEVICE_OBJECT FdoDevice,
 
     BytesReadWrite = Length;
 
+    /* A platform controller has no configuration space, it reads as zeros */
+    if (!FdoExtension->BusInterface.GetBusData)
+    {
+        if (IsReadData)
+            RtlZeroMemory(Buffer, Length);
+        return STATUS_SUCCESS;
+    }
+
     if (IsReadData)
     {
         RtlZeroMemory(Buffer, Length);
