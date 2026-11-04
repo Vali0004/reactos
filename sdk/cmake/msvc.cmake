@@ -2,6 +2,10 @@
 if(ARCH STREQUAL "arm64" AND NOT CMAKE_HOST_WIN32)
     set(MSVC_ARM64_GAS TRUE)
 endif()
+# armasm for 32-bit ARM is missing the same way, its asm goes through kxarm.h
+if(ARCH STREQUAL "arm" AND NOT CMAKE_HOST_WIN32)
+    set(MSVC_ARM_GAS TRUE)
+endif()
 
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")

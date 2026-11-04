@@ -38,6 +38,8 @@ ENDM
 
 #include <kxarm.h>
 
+#ifdef _MSC_VER
+
     MACRO
     CREATE_ALIAS1   $alias, $target
     IMPORT  SYM($alias), WEAK SYM($target)
@@ -53,6 +55,23 @@ ENDM
     CREATE_ALIAS1 $alias, $target
     CREATE_ALIAS2 $alias, $target
     MEND
+
+#else
+
+.macro CREATE_ALIAS1 alias, target
+    IMPORT \alias, WEAK, \target
+.endm
+
+.macro CREATE_ALIAS2 alias, target
+    IMPORT __imp_\alias, WEAK, __imp_\target
+.endm
+
+.macro CREATE_ALIAS alias, target
+    CREATE_ALIAS1 \alias, \target
+    CREATE_ALIAS2 \alias, \target
+.endm
+
+#endif
 #elif defined(_M_ARM64)
 
 #include <kxarm64.h>

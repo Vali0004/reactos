@@ -10,6 +10,12 @@
 
 #ifdef _MSC_VER
 
+    /* armasm labels start in the first column and take no colon */
+    #define LABEL(Name) Name
+
+    /* C++ decorated names, armasm quotes symbols with bars */
+    #define MANGLED(Name) |Name|
+
     /* Globals */
     GBLS __FuncStartLabel
     GBLS __FuncEpilog1StartLabel
@@ -170,89 +176,135 @@ __FuncEndLabel SETS ""
 
 #else
 
-/* Compatibility define */
-#define EQU .equ
+    /* Windows on ARM is Thumb-2 only */
+    .syntax unified
+    .thumb
 
-.macro IMPORT Name
-    /* Ignore */
-.endm
-
-.macro EXPORT Name
-    .global &Name
-.endm
+    #define LABEL(Name) Name:
+    #define EQU =
+    #define MANGLED(Name) #Name
 
 .macro TEXTAREA
-    .section .text, "rx"
-#if defined(_CONTROL_FLOW_GUARD)
-    .align 4
-#else
-    .align 2
-#endif
+    .section .text, "xr"
+    .p2align 2
 .endm
 
 .macro DATAAREA
-    .section .data, "rw"
+    .section .data, "dw"
 .endm
 
 .macro RODATAAREA
-    .section .rdata, "rw"
+    .section .rdata, "dr"
+.endm
+
+/* The armasm [FUNC] attribute has no GAS counterpart */
+.macro EXPORT Name, Attribute
+    .global "\Name"
+.endm
+
+/* Only weak aliases need anything, plain imports resolve at link time */
+.macro IMPORT Name, Kind, Target
+    .ifc \Kind,WEAK
+        .weak "\Name"
+        .set "\Name", "\Target"
+    .endif
 .endm
 
 .macro NESTED_ENTRY Name
-FuncName    .equ    &Name
-PrologName  .equ    &Name&_Prolog
-FuncEndName .equ    &Name&_end
-    .global &FuncName
-    .align 2
-    .func &FuncName
-    &FuncName:
+    .global \Name
+    .p2align 2
+    .thumb_func
+\Name:
 .endm
 
-// FIXME: should go to kxarmunw.h
 .macro PROLOG_END
-    \PrologName:
 .endm
 
 .macro NESTED_END Name
-    &FuncEndName:
-   .endfunc
+    .ltorg
 .endm
 
-.macro LEAF_ENTRY $FuncName, $AreaName
-    NESTED_ENTRY $FuncName, $AreaName
+.macro LEAF_ENTRY Name
+    NESTED_ENTRY \Name
 .endm
 
-.macro LEAF_END $FuncName
-    NESTED_END $FuncName
+.macro LEAF_END Name
+    NESTED_END \Name
 .endm
 
+.macro LEAF_ENTRY_NO_PDATA Name
+    NESTED_ENTRY \Name
+.endm
+
+.macro LEAF_END_NO_PDATA Name
+    NESTED_END \Name
+.endm
+
+.macro ALTERNATE_ENTRY Name
+    .global \Name
+    .thumb_func
+\Name:
+.endm
+
+.macro UNIMPLEMENTED Name
+.endm
+
+/* armasm pseudo instruction, a full 32-bit immediate */
+.macro mov32 Reg, Value
+    movw \Reg, #:lower16:\Value
+    movt \Reg, #:upper16:\Value
+.endm
+
+/* armasm ALIGN takes a byte count */
+.macro ALIGN Alignment, Offset, Pad, PadSize
+    .balign \Alignment
+.endm
+
+.macro dcb Values:vararg
+    .byte \Values
+.endm
+
+.macro dcw Values:vararg
+    .short \Values
+.endm
+
+.macro dcd Values:vararg
+    .long \Values
+.endm
+
+.macro END
+.endm
+
+    #define CR 13
+    #define LF 10
+    #define NUL 0
+    #define ASCII .ascii
 
 /* Some "intrinsics", see http://codemachine.com/article_armasm.html */
 
 .macro __debugbreak
-    DCD 0xDEFE
+    .inst.n 0xDEFE
 .endm
 
 .macro __assertfail
-    DCD 0xDEFC
+    .inst.n 0xDEFC
 .endm
 
 .macro __fastfail
-    DCD 0xDEFB
+    .inst.n 0xDEFB
 .endm
 
 .macro __rdpmccntr64
-    DCD 0xDEFA
+    .inst.n 0xDEFA
 .endm
 
 .macro __debugservice
-    DCD 0xDEFD
+    .inst.n 0xDEFD
 .endm
 
 .macro __brkdiv0
-    DCD 0xDEF9
+    .inst.n 0xDEF9
 .endm
-
 
 #endif
 
