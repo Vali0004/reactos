@@ -390,6 +390,10 @@ MiCheckPdeForSessionSpace(IN PVOID Address)
         {
             /* The copy is valid, so swap it in */
             InterlockedExchange((PLONG)PointerPde, TempPde.u.Long);
+#ifdef _M_ARM
+            /* the mmu walks the hardware l1, not the page directory */
+            MiArmSyncL1(PointerPde);
+#endif
             return STATUS_WAIT_1;
         }
 
@@ -416,11 +420,19 @@ MiCheckPdeForSessionSpace(IN PVOID Address)
 
     /* Now get the PDE for the address itself */
     PointerPde = MiAddressToPde(Address);
+#ifdef _M_ARM
+    /* a session pde copied in earlier may still be missing from the hardware l1 */
+    if (PointerPde->u.Hard.Valid)
+        MiArmSyncL1(PointerPde);
+#endif
     if (!PointerPde->u.Hard.Valid)
     {
         /* Do the swap, we should be good to go */
         Index = ((ULONG_PTR)Address - (ULONG_PTR)MmSessionBase) >> 22;
         PointerPde->u.Long = MmSessionSpace->PageTables[Index].u.Long;
+#ifdef _M_ARM
+        MiArmSyncL1(PointerPde);
+#endif
         if (PointerPde->u.Hard.Valid) return STATUS_WAIT_1;
 
         /* We had not allocated a page table for this session address yet, fail! */
