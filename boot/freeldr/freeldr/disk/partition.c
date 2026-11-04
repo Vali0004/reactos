@@ -8,7 +8,7 @@
  *              Copyright 2025-2026 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
  */
 
-#ifndef _M_ARM
+#if !defined(_M_ARM) || defined(UEFIBOOT)
 #include <freeldr.h>
 
 #include <debug.h>

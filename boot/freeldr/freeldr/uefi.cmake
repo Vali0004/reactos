@@ -36,10 +36,8 @@ elseif(ARCH STREQUAL "amd64")
     list(APPEND UEFILDR_ARC_SOURCE
         arch/hwpci.c)
 elseif(ARCH STREQUAL "arm")
-    list(APPEND UEFILDR_ARC_SOURCE
-        arch/arm/macharm.c
-        arch/arm/debug.c)
-    #TBD
+    list(APPEND UEFILDR_COMMON_ASM_SOURCE
+        arch/uefi/arm/uefiasm.s)
 elseif(ARCH STREQUAL "arm64")
     list(APPEND UEFILDR_COMMON_ASM_SOURCE
         arch/uefi/arm64/uefiasm.s)

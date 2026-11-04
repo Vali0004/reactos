@@ -28,6 +28,11 @@ PFN_NUMBER TotalPagesInLookupTable = 0;
 PFN_NUMBER FreePagesInLookupTable = 0;
 PFN_NUMBER LastFreePageHint = 0;
 PFN_NUMBER MmLowestPhysicalPage = 0xFFFFFFFF;
+#ifdef _M_ARM
+/* the first page of RAM, conversion.h maps the GB above it to KSEG0 */
+PFN_NUMBER MmArmRamBasePage = 0;
+#define MM_ARM_KSEG0_PAGES  ((1UL << 30) >> MM_PAGE_SHIFT)
+#endif
 PFN_NUMBER MmHighestPhysicalPage = 0;
 
 PFREELDR_MEMORY_DESCRIPTOR BiosMemoryMap;
@@ -427,6 +432,25 @@ PFN_NUMBER MmGetAddressablePageCountIncludingHoles(VOID)
             MmLowestPhysicalPage = MemoryDescriptor->BasePage;
         }
     }
+
+#ifdef _M_ARM
+    /* KSEG0 holds one GB, the loader and everything it hands over stays inside it */
+    MmArmRamBasePage = MmHighestPhysicalPage;
+    MemoryDescriptor = NULL;
+    while ((MemoryDescriptor = ArcGetMemoryDescriptor(MemoryDescriptor)) != NULL)
+    {
+        if ((MemoryDescriptor->MemoryType == LoaderFree) &&
+            (MemoryDescriptor->BasePage < MmArmRamBasePage))
+        {
+            MmArmRamBasePage = MemoryDescriptor->BasePage;
+        }
+    }
+    if (MmHighestPhysicalPage > MmArmRamBasePage + MM_ARM_KSEG0_PAGES)
+    {
+        WARN("RAM above %lx is out of reach for now\n", MmArmRamBasePage + MM_ARM_KSEG0_PAGES);
+        MmHighestPhysicalPage = MmArmRamBasePage + MM_ARM_KSEG0_PAGES;
+    }
+#endif
 
     TRACE("lo/hi %lx %lx\n", MmLowestPhysicalPage, MmHighestPhysicalPage);
     PageCount = MmHighestPhysicalPage - MmLowestPhysicalPage;

@@ -81,7 +81,12 @@ elseif(ARCH STREQUAL "amd64")
         arch/i386/i386bug.c)
 
 elseif(ARCH STREQUAL "arm")
-    #TBD
+    list(APPEND FREELDR_COMMON_ASM_SOURCE
+        arch/arm/misc.s)
+
+    # the bugcheck screen only draws through the machine vector
+    list(APPEND FREELDR_ARC_SOURCE
+        arch/arm64/arm64bug.c)
 elseif(ARCH STREQUAL "arm64")
     list(APPEND FREELDR_COMMON_ASM_SOURCE
         arch/arm64/misc.s)

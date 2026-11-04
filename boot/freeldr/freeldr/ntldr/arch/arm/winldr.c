@@ -1,250 +1,371 @@
 /*
- * PROJECT:         ReactOS Boot Loader
- * LICENSE:         BSD - See COPYING.ARM in the top level directory
- * FILE:            boot/freeldr/freeldr/arch/arm/winldr.c
- * PURPOSE:         ARM Kernel Loader
- * PROGRAMMERS:     ReactOS Portable Systems Group
+ * PROJECT:     FreeLoader
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     32-bit ARM page table setup and kernel hand off, after the ARM64 one
+ * COPYRIGHT:   Copyright 2026 Jonathan McAvin <mcavinjohn@gmail.com>
+ */
+
+/*
+ * The kernel lays out ARMv7 short descriptors like x86 without PAE, see
+ * ntoskrnl/include/internal/arm/mm.h. The loader builds that layout: a page
+ * directory mapped into itself at PDE_BASE, one page table page per 4 MB
+ * (four 1 KB coarse tables), and the first level table the MMU walks, kept
+ * beside the directory and mapped at MI_ARM_L1_TABLE. The loader runs
+ * identity mapped, the kernel sees the first GB of RAM at KSEG0.
  */
 
 /* INCLUDES ***************************************************************/
 
 #include <freeldr.h>
-#include <debug.h>
-#include <internal/arm/mm.h>
-#include <internal/arm/intrin_i.h>
+#include <cportlib/uartinfo.h>
 #include "../../winldr.h"
+#include "../../ntldropts.h"
 
-#define PFN_SHIFT                   12
-#define LARGE_PFN_SHIFT             20
+#include <debug.h>
+DBG_DEFAULT_CHANNEL(WINDOWS);
 
-#define PTE_BASE                    0xC0000000
-#define PDE_BASE                    0xC0400000
-#define PDR_BASE                    0xFFD00000
-#define VECTOR_BASE                 0xFFFF0000
+/* The kernel's layout, ntoskrnl/include/internal/arm/mm.h */
+#define PTE_BASE                0xC0000000
+#define PDE_BASE                0xC0300000
+#define MI_ARM_L1_TABLE         0xC0800000
 
-#ifdef _ZOOM2_
-#define IDMAP_BASE                  0x81000000
-#define MMIO_BASE                   0x10000000
-#else
-#define IDMAP_BASE                  0x00000000
-#define MMIO_BASE                   0x10000000
-#endif
+#define ARM_PDE_INDEX(Va)       ((ULONG_PTR)(Va) >> 22)
+#define ARM_PTE_INDEX(Va)       (((ULONG_PTR)(Va) >> 12) & 0x3FF)
 
-#define LowMemPageTableIndex        (IDMAP_BASE >> PDE_SHIFT)
-#define MmioPageTableIndex          (MMIO_BASE >> PDE_SHIFT)
-#define KernelPageTableIndex        (KSEG0_BASE >> PDE_SHIFT)
-#define StartupPtePageTableIndex    (PTE_BASE >> PDE_SHIFT)
-#define StartupPdePageTableIndex    (PDE_BASE >> PDE_SHIFT)
-#define PdrPageTableIndex           (PDR_BASE >> PDE_SHIFT)
-#define VectorPageTableIndex        (VECTOR_BASE >> PDE_SHIFT)
+/* Small page descriptors without TEX remap, AP[0] gives kernel read write */
+#define ARM_PTE_XN              0x001
+#define ARM_PTE_SMALL_PAGE      0x002
+#define ARM_PTE_AP0             0x010
+#define ARM_PTE_NORMAL          (ARM_PTE_SMALL_PAGE | ARM_PTE_AP0 | 0x04C) /* TEX 001 C B */
+#define ARM_PTE_NONCACHED       (ARM_PTE_SMALL_PAGE | ARM_PTE_AP0 | 0x040 | ARM_PTE_XN)
+#define ARM_PTE_DEVICE          (ARM_PTE_SMALL_PAGE | ARM_PTE_AP0 | 0x004 | ARM_PTE_XN)
 
-#ifndef _ZOOM2_
-PVOID MempPdrBaseAddress = (PVOID)0x70000;
-PVOID MempKernelBaseAddress = (PVOID)0;
-#else
-PVOID MempPdrBaseAddress = (PVOID)0x81100000;
-PVOID MempKernelBaseAddress = (PVOID)0x80000000;
-#endif
+/* page tables and the directory are never executed */
+#define ARM_PTE_TABLE           (ARM_PTE_NORMAL | ARM_PTE_XN)
 
-/* Converts a Physical Address into a Page Frame Number */
-#define PaToPfn(p)                  ((p) >> PFN_SHIFT)
-#define PaToLargePfn(p)             ((p) >> LARGE_PFN_SHIFT)
-#define PaPtrToPfn(p)               (((ULONG_PTR)(p)) >> PFN_SHIFT)
+/* A coarse table in domain 0 */
+#define ARM_L1_COARSE_TABLE     0x001
+#define ARM_COARSE_TABLE_SIZE   0x400
+#define ARM_L1_SIZE             0x4000
 
-/* Converts a Physical Address into a Coarse Page Table PFN */
-#define PaPtrToPdePfn(p)            (((ULONG_PTR)(p)) >> CPT_SHIFT)
+/* TTBR0 with write back walks, inner shareable */
+#define ARM_TTBR_WALK_CACHED    0x6A
 
-typedef struct _KPDR_PAGE
-{
-    PAGE_DIRECTORY_ARM PageDir;             // 0xC0400000 [0xFFD00000]
-    CHAR HyperSpace[233 * PAGE_SIZE];       // 0xC0404000 [0xFFD04000]
-    PAGE_TABLE_ARM KernelPageTable[3];      // 0xC04ED000 [0xFFDED000]
-    CHAR SharedData[PAGE_SIZE];             // 0xC04F0000 [0xFFDF0000]
-    CHAR KernelStack[KERNEL_STACK_SIZE];    // 0xC04F1000 [0xFFDF1000]
-    CHAR PanicStack[KERNEL_STACK_SIZE];     // 0xC04F4000 [0xFFDF4000]
-    CHAR InterruptStack[KERNEL_STACK_SIZE]; // 0xC04F7000 [0xFFDF7000]
-    CHAR InitialProcess[PAGE_SIZE];         // 0xC04FA000 [0xFFDFA000]
-    CHAR InitialThread[PAGE_SIZE];          // 0xC04FB000 [0xFFDFB000]
-    CHAR Prcb[PAGE_SIZE];                   // 0xC04FC000 [0xFFDFC000]
-    PAGE_TABLE_ARM PageDirPageTable;        // 0xC04FD000 [0xFFDFD000]
-    PAGE_TABLE_ARM VectorPageTable;         // 0xC04FE000 [0xFFDFE000]
-    CHAR Pcr[PAGE_SIZE];                    // 0xC04FF000 [0xFFDFF000]
-} KPDR_PAGE, *PKPDR_PAGE;
+VOID ArmSwitchTranslation(_In_ ULONG Ttbr0);
 
-C_ASSERT(sizeof(KPDR_PAGE) == (1 * 1024 * 1024));
+/* The UEFI framebuffer, see uefivid.c */
+extern ULONG_PTR VramAddress;
+extern ULONG VramSize;
 
-HARDWARE_PTE_ARMV6 TempPte;
-HARDWARE_LARGE_PTE_ARMV6 TempLargePte;
-HARDWARE_PDE_ARMV6 TempPde;
-PKPDR_PAGE PdrPage;
+/* The console copy of the screen, see vidfb.c */
+PVOID VidFbGetShadowBuffer(VOID);
+ULONG VidFbGetShadowSize(VOID);
+
+extern PUCHAR ComPortAddress;
+
+/* Set with DEBUGPORT=SCREEN, the hand off and the early kernel print on the loader console */
+static BOOLEAN WinLdrpScreenTrace = FALSE;
+
+#define WinLdrpTrace(...) \
+    do { if (WinLdrpScreenTrace) WinLdrpEarlyPrint(__VA_ARGS__); } while (0)
+
+/* GLOBALS ***************************************************************/
+
+static PULONG PageDirectory;
+static PULONG FirstLevelTable;
+PFN_NUMBER SharedUserDataPfn;
 
 /* FUNCTIONS **************************************************************/
 
-BOOLEAN
-MempSetupPaging(IN PFN_NUMBER StartPage,
-                IN PFN_NUMBER NumberOfPages,
-                IN BOOLEAN KernelMapping)
+static
+VOID
+MempSyncL1(
+    _In_ ULONG PdeIndex)
 {
-    return TRUE;
+    ULONG Entry, i;
+
+    if (!(PageDirectory[PdeIndex] & ARM_PTE_SMALL_PAGE))
+    {
+        for (i = 0; i < 4; i++)
+            FirstLevelTable[(PdeIndex * 4) + i] = 0;
+        return;
+    }
+
+    Entry = (PageDirectory[PdeIndex] & ~(MM_PAGE_SIZE - 1)) | ARM_L1_COARSE_TABLE;
+    for (i = 0; i < 4; i++)
+        FirstLevelTable[(PdeIndex * 4) + i] = Entry + (i * ARM_COARSE_TABLE_SIZE);
 }
 
+static
 VOID
-MempUnmapPage(IN PFN_NUMBER Page)
+MempSetPde(
+    _In_ ULONG PdeIndex,
+    _In_ ULONG_PTR TablePhysical)
 {
-    return;
+    PageDirectory[PdeIndex] = (TablePhysical & ~(MM_PAGE_SIZE - 1)) | ARM_PTE_TABLE;
+    MempSyncL1(PdeIndex);
 }
 
-VOID
-MempDump(VOID)
+static
+PULONG
+MempGetPageTable(
+    _In_ ULONG_PTR VirtualAddress,
+    _In_ BOOLEAN Create)
 {
-    return;
+    ULONG PdeIndex = ARM_PDE_INDEX(VirtualAddress);
+    PULONG Table;
+
+    if (PageDirectory[PdeIndex] & ARM_PTE_SMALL_PAGE)
+        return (PULONG)(PageDirectory[PdeIndex] & ~(MM_PAGE_SIZE - 1));
+
+    if (!Create)
+        return NULL;
+
+    Table = MmAllocateMemoryWithType(MM_PAGE_SIZE, LoaderMemoryData);
+    if (!Table)
+        return NULL;
+
+    RtlZeroMemory(Table, MM_PAGE_SIZE);
+    MempSetPde(PdeIndex, (ULONG_PTR)Table);
+    return Table;
 }
 
 static
 BOOLEAN
-WinLdrMapSpecialPages(ULONG PcrBasePage)
+MempMapSinglePage(
+    _In_ ULONG_PTR VirtualAddress,
+    _In_ ULONG_PTR PhysicalAddress,
+    _In_ ULONG Attributes)
 {
-    ULONG i;
-    PHARDWARE_PTE_ARMV6 PointerPte;
-    PHARDWARE_PDE_ARMV6 PointerPde;
-    PHARDWARE_LARGE_PTE_ARMV6 LargePte;
-    PFN_NUMBER Pfn;
+    PULONG Table;
+    ULONG Index;
 
-    /* Setup the Startup PDE */
-    LargePte = &PdrPage->PageDir.Pte[StartupPdePageTableIndex];
-    TempLargePte.PageFrameNumber = PaToLargePfn((ULONG_PTR)&PdrPage->PageDir);
-    *LargePte = TempLargePte;
-
-    /* Map-in the PDR */
-    LargePte = &PdrPage->PageDir.Pte[PdrPageTableIndex];
-    *LargePte = TempLargePte;
-
-    /* After this point, any MiAddressToPde is guaranteed not to fault */
-
-    /*
-     * Link them in the Startup PDE.
-     * Note these are the entries in the PD at (MiAddressToPde(PTE_BASE)).
-     */
-    PointerPde = &PdrPage->PageDir.Pde[StartupPtePageTableIndex];
-    Pfn = PaPtrToPdePfn(&PdrPage->PageDirPageTable);
-    for (i = 0; i < 4; i++)
+    Table = MempGetPageTable(VirtualAddress, TRUE);
+    if (!Table)
     {
-        TempPde.PageFrameNumber = Pfn++;
-        *PointerPde++ = TempPde;
+        ERR("No page table for %p\n", (PVOID)VirtualAddress);
+        return FALSE;
     }
 
-    /*
-     * Now map these page tables in PTE space (MiAddressToPte(PTE_BASE)).
-     * Note that they all live on a single page, since each is 1KB.
-     */
-    PointerPte = &PdrPage->PageDirPageTable.Pte[0x300];
-    TempPte.PageFrameNumber = PaPtrToPfn(&PdrPage->PageDirPageTable);
-    *PointerPte = TempPte;
+    Index = ARM_PTE_INDEX(VirtualAddress);
+    if (Table[Index] & ARM_PTE_SMALL_PAGE)
+    {
+        ERR("%p is already mapped\n", (PVOID)VirtualAddress);
+        return FALSE;
+    }
 
-    /*
-     * After this point, MiAddressToPte((PDE_BASE) to MiAddressToPte(PDE_TOP))
-     * is guaranteed not to fault.
-     * Any subsequent page allocation will first need its page table created
-     * and mapped in the PTE_BASE first, then the page table itself will be
-     * editable through its flat PTE address.
-     */
-
-    /* Setup the Vector PDE */
-    PointerPde = &PdrPage->PageDir.Pde[VectorPageTableIndex];
-    TempPde.PageFrameNumber = PaPtrToPdePfn(&PdrPage->VectorPageTable);
-    *PointerPde = TempPde;
-
-    /* Setup the Vector PTEs */
-    PointerPte = &PdrPage->VectorPageTable.Pte[0xF0];
-    TempPte.PageFrameNumber = 0;
-    *PointerPte = TempPte;
-
-    /* TODO: Map in the kernel CPTs */
+    Table[Index] = (PhysicalAddress & ~(MM_PAGE_SIZE - 1)) | Attributes;
     return TRUE;
 }
 
-VOID
-WinLdrSetupForNt(IN PLOADER_PARAMETER_BLOCK LoaderBlock,
-                 IN PVOID *GdtIdt,
-                 IN PULONG PcrBasePage,
-                 IN PULONG TssBasePage)
+static
+BOOLEAN
+MempIsPageMapped(
+    _In_ ULONG_PTR VirtualAddress)
 {
-    PKPDR_PAGE PdrPage = (PVOID)0xFFD00000;
+    PULONG Table = MempGetPageTable(VirtualAddress, FALSE);
 
-    /* Load cache information */
-    LoaderBlock->u.Arm.FirstLevelDcacheSize = FirstLevelDcacheSize;
-    LoaderBlock->u.Arm.FirstLevelDcacheFillSize = FirstLevelDcacheFillSize;
-    LoaderBlock->u.Arm.FirstLevelIcacheSize = FirstLevelIcacheSize;
-    LoaderBlock->u.Arm.FirstLevelIcacheFillSize = FirstLevelIcacheFillSize;
-    LoaderBlock->u.Arm.SecondLevelDcacheSize = SecondLevelDcacheSize;
-    LoaderBlock->u.Arm.SecondLevelDcacheFillSize = SecondLevelDcacheFillSize;
-    LoaderBlock->u.Arm.SecondLevelIcacheSize = SecondLevelIcacheSize;
-    LoaderBlock->u.Arm.SecondLevelIcacheFillSize = SecondLevelIcacheSize;
+    return Table && (Table[ARM_PTE_INDEX(VirtualAddress)] & ARM_PTE_SMALL_PAGE);
+}
 
-    /* Write initial context information */
-    LoaderBlock->KernelStack = (ULONG_PTR)PdrPage->KernelStack;
-    LoaderBlock->KernelStack += KERNEL_STACK_SIZE;
-    LoaderBlock->u.Arm.PanicStack = (ULONG_PTR)PdrPage->PanicStack;
-    LoaderBlock->u.Arm.PanicStack += KERNEL_STACK_SIZE;
-    LoaderBlock->u.Arm.InterruptStack = (ULONG_PTR)PdrPage->InterruptStack;
-    LoaderBlock->u.Arm.InterruptStack += KERNEL_STACK_SIZE;
-    LoaderBlock->Prcb = (ULONG_PTR)PdrPage->Prcb;
-    LoaderBlock->Process = (ULONG_PTR)PdrPage->InitialProcess;
-    LoaderBlock->Thread = (ULONG_PTR)PdrPage->InitialThread;
+static
+PFN_NUMBER
+MempMapRangeOfPages(
+    _In_ ULONG_PTR VirtualAddress,
+    _In_ ULONG_PTR PhysicalAddress,
+    _In_ PFN_NUMBER cPages)
+{
+    PFN_NUMBER i;
+
+    for (i = 0; i < cPages; i++)
+    {
+        if (!MempMapSinglePage(VirtualAddress, PhysicalAddress, ARM_PTE_NORMAL))
+        {
+            ERR("Failed to map page %ld from %p to %p\n",
+                i, (PVOID)VirtualAddress, (PVOID)PhysicalAddress);
+            return i;
+        }
+        VirtualAddress += MM_PAGE_SIZE;
+        PhysicalAddress += MM_PAGE_SIZE;
+    }
+
+    return i;
 }
 
 static
 BOOLEAN
 MempAllocatePageTables(VOID)
 {
+    PULONG L1Map;
+    PUCHAR L1Block;
     ULONG i;
-    PHARDWARE_PTE_ARMV6 PointerPte;
-    PHARDWARE_PDE_ARMV6 PointerPde;
-    PHARDWARE_LARGE_PTE_ARMV6 LargePte;
-    PFN_NUMBER Pfn;
 
-    /* Setup templates */
-    TempPte.Sbo = TempPte.Valid = TempLargePte.LargePage = TempLargePte.Sbo = TempPde.Valid = 1;
+    TRACE(">>> MempAllocatePageTables\n");
 
-    /* Allocate the 1MB "PDR" (Processor Data Region). Must be 1MB aligned */
-    PdrPage = MmAllocateMemoryAtAddress(sizeof(KPDR_PAGE),
-                                        MempPdrBaseAddress,
-                                        LoaderMemoryData);
+    PageDirectory = MmAllocateMemoryWithType(MM_PAGE_SIZE, LoaderMemoryData);
 
-    /* Setup the Low Memory PDE as an identity-mapped Large Page (1MB) */
-    LargePte = &PdrPage->PageDir.Pte[LowMemPageTableIndex];
-    TempLargePte.PageFrameNumber = PaToLargePfn(IDMAP_BASE);
-    *LargePte = TempLargePte;
-
-    /* Setup the MMIO PDE as two identity mapped large pages -- the kernel will blow these away later */
-    LargePte = &PdrPage->PageDir.Pte[MmioPageTableIndex];
-    Pfn = PaToLargePfn(MMIO_BASE);
-    for (i = 0; i < 2; i++)
+    /* the first level table needs 16 KB alignment, the loader only aligns pages */
+    L1Block = MmAllocateMemoryWithType(2 * ARM_L1_SIZE, LoaderMemoryData);
+    L1Map = MmAllocateMemoryWithType(MM_PAGE_SIZE, LoaderMemoryData);
+    if (!PageDirectory || !L1Block || !L1Map)
     {
-        TempLargePte.PageFrameNumber = Pfn++;
-        *LargePte++ = TempLargePte;
+        ERR("failed to allocate the page tables\n");
+        return FALSE;
     }
 
-    /* Setup the Kernel PDEs */
-    PointerPde = &PdrPage->PageDir.Pde[KernelPageTableIndex];
-    Pfn = PaPtrToPdePfn(PdrPage->KernelPageTable);
-    for (i = 0; i < 12; i++)
+    FirstLevelTable = (PULONG)ALIGN_UP_BY((ULONG_PTR)L1Block, ARM_L1_SIZE);
+    RtlZeroMemory(PageDirectory, MM_PAGE_SIZE);
+    RtlZeroMemory(FirstLevelTable, ARM_L1_SIZE);
+    RtlZeroMemory(L1Map, MM_PAGE_SIZE);
+
+    /* The directory maps itself, which puts the page tables at PTE_BASE */
+    MempSetPde(ARM_PDE_INDEX(PTE_BASE), (ULONG_PTR)PageDirectory);
+
+    /* The kernel reaches the first level table at MI_ARM_L1_TABLE */
+    for (i = 0; i < (ARM_L1_SIZE / MM_PAGE_SIZE); i++)
     {
-        TempPde.PageFrameNumber = Pfn;
-        *PointerPde++ = TempPde;
-        Pfn++;
+        L1Map[ARM_PTE_INDEX(MI_ARM_L1_TABLE + (i * MM_PAGE_SIZE))] =
+            ((ULONG_PTR)FirstLevelTable + (i * MM_PAGE_SIZE)) | ARM_PTE_TABLE;
+    }
+    MempSetPde(ARM_PDE_INDEX(MI_ARM_L1_TABLE), (ULONG_PTR)L1Map);
+
+    TRACE(">>> leave MempAllocatePageTables\n");
+    return TRUE;
+}
+
+BOOLEAN
+MempSetupPaging(
+    _In_ PFN_NUMBER StartPage,
+    _In_ PFN_NUMBER NumberOfPages,
+    _In_ BOOLEAN KernelMapping)
+{
+    ULONG_PTR Physical = StartPage * MM_PAGE_SIZE;
+
+    TRACE(">>> MempSetupPaging(0x%lx, %ld, %p)\n",
+          StartPage, NumberOfPages, PaToVa((PVOID)Physical));
+
+    /* Identity mapping, the loader keeps running there after the switch */
+    if (MempMapRangeOfPages(Physical, Physical, NumberOfPages) != NumberOfPages)
+    {
+        ERR("Failed to map pages %ld, %ld\n", StartPage, NumberOfPages);
+        return FALSE;
     }
 
-    /* Setup the Kernel PTEs */
-    PointerPte = PdrPage->KernelPageTable[0].Pte;
-    Pfn = PaPtrToPfn(MempKernelBaseAddress);
-    for (i = 0; i < 3072; i++)
+    if (KernelMapping)
     {
-        TempPte.PageFrameNumber = Pfn++;
-        *PointerPte++ = TempPte;
+        if (MempMapRangeOfPages((ULONG_PTR)PaToVa((PVOID)Physical), Physical, NumberOfPages) != NumberOfPages)
+        {
+            ERR("Failed to map pages %ld, %ld\n", StartPage, NumberOfPages);
+            return FALSE;
+        }
     }
 
-    /* Done */
+    return TRUE;
+}
+
+VOID
+MempUnmapPage(
+    _In_ PFN_NUMBER Page)
+{
+    UNREFERENCED_PARAMETER(Page);
+}
+
+/**
+ * @brief Prints on the loader console and the debug port.
+ *
+ * The kernel calls this through the loader block until its own debugger is
+ * up, it runs from the identity mapping of the loader.
+ */
+static
+ULONG
+WinLdrpEarlyPrint(
+    _In_ PCSTR Format,
+    ...)
+{
+    CHAR Buffer[256];
+    va_list Args;
+    PCHAR Current;
+
+    va_start(Args, Format);
+    _vsnprintf(Buffer, sizeof(Buffer) - 1, Format, Args);
+    va_end(Args);
+    Buffer[sizeof(Buffer) - 1] = ANSI_NULL;
+
+    /* Straight to the devices, DbgPrint would show it twice with a screen debug port */
+    for (Current = Buffer; *Current != ANSI_NULL; Current++)
+    {
+        MachConsPutChar(*Current);
+#if DBG
+        if (*Current == '\n')
+            Rs232PortPutByte('\r');
+        Rs232PortPutByte(*Current);
+#endif
+    }
+
+    return (ULONG)(Current - Buffer);
+}
+
+/* The loader console keeps drawing after the switch while the kernel prints through it */
+static
+VOID
+WinLdrpMapFrameBuffer(VOID)
+{
+    ULONG_PTR Address, End, Copy;
+
+    if (!VramAddress || !VramSize)
+        return;
+
+    End = ALIGN_UP_BY(VramAddress + VramSize, MM_PAGE_SIZE);
+    for (Address = ALIGN_DOWN_BY(VramAddress, MM_PAGE_SIZE); Address < End; Address += MM_PAGE_SIZE)
+    {
+        if (!MempIsPageMapped(Address))
+            MempMapSinglePage(Address, Address, ARM_PTE_NONCACHED);
+    }
+
+    /* Every character also lands in the copy, which can sit above the pages the loader maps */
+    Copy = (ULONG_PTR)VidFbGetShadowBuffer();
+    if (!Copy)
+        return;
+
+    End = ALIGN_UP_BY(Copy + VidFbGetShadowSize(), MM_PAGE_SIZE);
+    for (Address = ALIGN_DOWN_BY(Copy, MM_PAGE_SIZE); Address < End; Address += MM_PAGE_SIZE)
+    {
+        if (!MempIsPageMapped(Address))
+            MempMapSinglePage(Address, Address, ARM_PTE_NORMAL);
+    }
+}
+
+/* The debug port stays reachable at its physical address */
+static
+VOID
+WinLdrpMapDebugPorts(VOID)
+{
+    ULONG_PTR Page;
+
+    if (!ComPortAddress)
+        return;
+
+    Page = (ULONG_PTR)ComPortAddress & ~(MM_PAGE_SIZE - 1);
+    if (!MempIsPageMapped(Page))
+        MempMapSinglePage(Page, Page, ARM_PTE_DEVICE);
+}
+
+static
+BOOLEAN
+WinLdrMapSpecialPages(VOID)
+{
+    if (!MempMapSinglePage(KI_USER_SHARED_DATA, SharedUserDataPfn * MM_PAGE_SIZE, ARM_PTE_NORMAL | ARM_PTE_XN))
+    {
+        ERR("Could not map KI_USER_SHARED_DATA\n");
+        return FALSE;
+    }
+
+    WinLdrpMapDebugPorts();
+    WinLdrpMapFrameBuffer();
+
+    /* The page table for the 4 MB HAL address space, KI_USER_SHARED_DATA sits there too */
+    MempGetPageTable(MM_HAL_VA_START, TRUE);
+
     return TRUE;
 }
 
@@ -252,32 +373,57 @@ VOID
 WinLdrSetProcessorContext(
     _In_ USHORT OperatingSystemVersion)
 {
-    ARM_CONTROL_REGISTER ControlRegister;
-    ARM_TTB_REGISTER TtbRegister;
-    ARM_DOMAIN_REGISTER DomainRegister;
+    UNREFERENCED_PARAMETER(OperatingSystemVersion);
 
-    /* Set the TTBR */
-    TtbRegister.AsUlong = (ULONG_PTR)&PdrPage->PageDir;
-    ASSERT(TtbRegister.Reserved == 0);
-    KeArmTranslationTableRegisterSet(TtbRegister);
+    TRACE("WinLdrSetProcessorContext\n");
 
-    /* Disable domains and simply use access bits on PTEs */
-    DomainRegister.AsUlong = 0;
-    DomainRegister.Domain0 = ClientDomain;
-    KeArmDomainRegisterSet(DomainRegister);
+    _disable();
 
-    /* Enable ARMv6+ paging (MMU), caches and the access bit */
-    ControlRegister = KeArmControlRegisterGet();
-    ControlRegister.MmuEnabled = TRUE;
-    ControlRegister.ICacheEnabled = TRUE;
-    ControlRegister.DCacheEnabled = TRUE;
-    ControlRegister.ForceAp = TRUE;
-    ControlRegister.ExtendedPageTables = TRUE;
-    KeArmControlRegisterSet(ControlRegister);
+    WinLdrpTrace("freeldr: switching to the kernel tables, L1 %p, directory %p\n",
+                 FirstLevelTable, PageDirectory);
+    ArmSwitchTranslation((ULONG)FirstLevelTable | ARM_TTBR_WALK_CACHED);
+    WinLdrpTrace("freeldr: on the kernel tables\n");
+
+    TRACE("leave WinLdrSetProcessorContext\n");
 }
 
 VOID
 WinLdrSetupMachineDependent(
-    PLOADER_PARAMETER_BLOCK LoaderBlock)
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PVOID SharedUserDataAddress;
+
+    LoaderBlock->u.I386.MachineType = 0;
+
+    /* The load options are already a kernel address, the loader still runs on its own tables */
+    WinLdrpScreenTrace = (NtLdrGetOption(VaToPa(LoaderBlock->LoadOptions), "DEBUGPORT=SCREEN") != NULL);
+    LoaderBlock->u.I386.CommonDataArea = WinLdrpScreenTrace ? (PVOID)WinLdrpEarlyPrint : NULL;
+    WinLdrpTrace("freeldr: boot services left\n");
+
+    SharedUserDataAddress = MmAllocateMemoryWithType(MM_PAGE_SIZE, LoaderStartupPcrPage);
+    if (SharedUserDataAddress == NULL)
+    {
+        UiMessageBox("Can't allocate SharedUserData page.");
+        return;
+    }
+    SharedUserDataPfn = (ULONG_PTR)SharedUserDataAddress >> MM_PAGE_SHIFT;
+    RtlZeroMemory(SharedUserDataAddress, MM_PAGE_SIZE);
+
+    if (!MempAllocatePageTables())
+    {
+        FrLdrBugCheckWithMessage(MEMORY_INIT_FAILURE,
+                                 __FILE__,
+                                 __LINE__,
+                                 "Failed to allocate the page tables.");
+    }
+
+    WinLdrMapSpecialPages();
+    WinLdrpTrace("freeldr: page tables at %p, framebuffer %p mapped\n", PageDirectory, (PVOID)VramAddress);
+}
+
+VOID
+MempDump(VOID)
 {
 }
+
+/* EOF */

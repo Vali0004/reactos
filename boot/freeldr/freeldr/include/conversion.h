@@ -8,7 +8,28 @@
 
 #pragma once
 
-#ifndef _ZOOM2_
+#if defined(_M_ARM)
+/*
+ * ARM RAM rarely starts at 0, an OR would put a board's RAM at 1 GB onto the
+ * page tables at 0xC0000000. The first GB of RAM goes to KSEG0 instead,
+ * meminit.c keeps the loader inside it.
+ */
+extern PFN_NUMBER MmArmRamBasePage;
+
+FORCEINLINE
+PVOID
+VaToPa(PVOID Va)
+{
+    return (PVOID)((ULONG_PTR)Va - KSEG0_BASE + (MmArmRamBasePage << MM_PAGE_SHIFT));
+}
+
+FORCEINLINE
+PVOID
+PaToVa(PVOID Pa)
+{
+    return (PVOID)((ULONG_PTR)Pa - (MmArmRamBasePage << MM_PAGE_SHIFT) + KSEG0_BASE);
+}
+#elif !defined(_ZOOM2_)
 /* Arch-specific addresses translation implementation */
 FORCEINLINE
 PVOID

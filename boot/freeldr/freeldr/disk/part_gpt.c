@@ -7,7 +7,7 @@
 
 /* INCLUDES ******************************************************************/
 
-#ifndef _M_ARM
+#if !defined(_M_ARM) || defined(UEFIBOOT)
 // #include <freeldr.h>
 #include "part_gpt.h"
 

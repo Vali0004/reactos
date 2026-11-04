@@ -6,7 +6,7 @@
  *              Copyright 2019 Stanislav Motylkov <x86corez@gmail.com>
  */
 
-#ifndef _M_ARM
+#if !defined(_M_ARM) || defined(UEFIBOOT)
 // #include <freeldr.h>
 
 /* BRFR signature at disk offset 0x600 (== 3 * 0x200) */

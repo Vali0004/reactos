@@ -19,7 +19,8 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _M_ARM
+/* the old ARM board loader has no serial support, the UEFI one does */
+#if !defined(_M_ARM) || defined(UEFIBOOT)
 
 /* INCLUDES *******************************************************************/
 
@@ -36,7 +37,7 @@
 static PUCHAR Rs232ComPort = NULL;
 static CPPORT Rs232ComPortInfo;
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
 /* PL011 data and flag registers */
 #define PL011_DR        0x00
 #define PL011_FR        0x18
@@ -65,7 +66,7 @@ Rs232PortInitialize(
 
     if (!PortAddress)
     {
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
         USHORT Subtype;
         ULONG64 Address;
 
@@ -128,7 +129,7 @@ Rs232PortInitialize(
 BOOLEAN Rs232PortGetByte(PUCHAR ByteReceived)
 {
     if (!Rs232ComPort) return FALSE;
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     if (Rs232IsPl011)
     {
         while (READ_REGISTER_ULONG((PULONG)(Rs232ComPort + PL011_FR)) & PL011_FR_RXFE)
@@ -151,7 +152,7 @@ BOOLEAN Rs232PortPollByte(PUCHAR ByteReceived)
 VOID Rs232PortPutByte(UCHAR ByteToSend)
 {
     if (!Rs232ComPort) return;
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     if (Rs232IsPl011)
     {
         while (READ_REGISTER_ULONG((PULONG)(Rs232ComPort + PL011_FR)) & PL011_FR_TXFF)

@@ -136,7 +136,7 @@ DebugInit(
             /* Set the port to use, a number picks an entry of a base table that has no 16550 on ARM64 */
             if (*PortString != ':')
             {
-#ifndef _M_ARM64
+#if !defined(_M_ARM64) && !defined(_M_ARM)
                 /* Read the port and set its address */
                 Value = (ULONG)atol(PortString);
                 if (Value > 0 && Value <= MAX_COM_PORTS)

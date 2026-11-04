@@ -128,6 +128,9 @@
 #include <arch/amd64/amd64.h>
 #elif defined(_M_PPC)
 #include <arch/powerpc/hardware.h>
+#elif defined(_M_ARM) && defined(UEFIBOOT)
+#include <arch/pc/pcbios.h>
+#include <arch/arm/arm.h>
 #elif defined(_M_ARM)
 #include <arch/arm/hardware.h>
 #elif defined(_M_ARM64)
