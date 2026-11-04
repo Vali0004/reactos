@@ -35,6 +35,8 @@ AddMemoryDescriptor(
 
 extern EFI_SYSTEM_TABLE* GlobalSystemTable;
 extern EFI_HANDLE GlobalImageHandle;
+extern ULONG_PTR VramAddress;
+extern ULONG VramSize;
 
 EFI_MEMORY_DESCRIPTOR* EfiMemoryMap = NULL;
 UINT32 FreeldrDescCount;
@@ -271,10 +273,28 @@ UefiMemGetMemoryMap(ULONG *MemoryMapSize)
         /* We really don't want to touch these reserved spots at all */
         if (MemoryType != LoaderReserve)
         {
+            ULONGLONG Start, End, VramStart, VramEnd;
+
             UefiSetMemory(FreeldrMem,
                           MapEntry->PhysicalStart,
                           MapEntry->NumberOfPages,
                           MemoryType);
+
+            /* firmware that scans out from RAM may hand the framebuffer over as free memory */
+            Start = MapEntry->PhysicalStart;
+            End = Start + (MapEntry->NumberOfPages * EFI_PAGE_SIZE);
+            VramStart = VramAddress & ~((ULONGLONG)EFI_PAGE_SIZE - 1);
+            VramEnd = ((ULONGLONG)VramAddress + VramSize + EFI_PAGE_SIZE - 1) & ~((ULONGLONG)EFI_PAGE_SIZE - 1);
+            if (VramSize && (VramStart < End) && (VramEnd > Start))
+            {
+                Start = max(Start, VramStart);
+                End = min(End, VramEnd);
+                TRACE("Reserving the framebuffer at %I64x-%I64x\n", Start, End);
+                UefiSetMemory(FreeldrMem,
+                              (ULONG_PTR)Start,
+                              (PFN_COUNT)((End - Start) / EFI_PAGE_SIZE),
+                              LoaderFirmwarePermanent);
+            }
         }
 
         MapEntry = NEXT_MEMORY_DESCRIPTOR(MapEntry, DescriptorSize);
