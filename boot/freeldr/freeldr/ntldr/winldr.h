@@ -91,6 +91,20 @@ NtLdrNormalizeOptions(
 PVOID WinLdrLoadModule(PCSTR ModuleName, PULONG Size,
                        TYPE_OF_MEMORY MemoryType);
 
+BOOLEAN
+WinLdrLoadDeviceDriver(
+    _Inout_ PLIST_ENTRY LoadOrderListHead,
+    _In_ PCSTR BootPath,
+    _In_ PUNICODE_STRING FilePath,
+    _In_ ULONG Flags,
+    _Out_ PLDR_DATA_TABLE_ENTRY *DriverDTE);
+
+// halext.c
+BOOLEAN
+WinLdrLoadHalExtensions(
+    _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ PCSTR BootPath);
+
 // wlmemory.c
 BOOLEAN
 WinLdrSetupMemoryLayout(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock);

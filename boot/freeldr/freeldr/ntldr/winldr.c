@@ -120,6 +120,7 @@ AllocateAndInitLPB(
     InitializeListHead(&LoaderBlock->LoadOrderListHead);
     InitializeListHead(&LoaderBlock->MemoryDescriptorListHead);
     InitializeListHead(&LoaderBlock->BootDriverListHead);
+    InitializeListHead(&Extension->HalExtensionModuleList);
 
     *OutLoaderBlock = LoaderBlock;
 }
@@ -295,6 +296,8 @@ WinLdrInitializePhase1(
         List_PaToVa(&Extension->BootApplicationPersistentData);
     }
 
+    List_PaToVa(&Extension->HalExtensionModuleList);
+
     /* Set the headless block pointer */
     if (WinLdrTerminalConnected)
     {
@@ -318,7 +321,7 @@ WinLdrInitializePhase1(
     TRACE("WinLdrInitializePhase1() completed\n");
 }
 
-static BOOLEAN
+BOOLEAN
 WinLdrLoadDeviceDriver(PLIST_ENTRY LoadOrderListHead,
                        PCSTR BootPath,
                        PUNICODE_STRING FilePath,
@@ -1444,6 +1447,12 @@ LoadAndBootWindowsCommon(
  ****/
 
     UiSetProgressBarSubset(40, 90); // NTOS goes from 25 to 75%
+
+#ifdef UEFIBOOT
+    /* hal extensions sit between the hal and the boot drivers, as winload has them */
+    if (!WinLdrLoadHalExtensions(LoaderBlock, BootPath))
+        UiMessageBox("Cannot load a HAL extension the CSRT asks for!");
+#endif
 
     /* Load boot drivers */
     UiSetProgressBarText("Loading boot drivers...");
