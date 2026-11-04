@@ -12,6 +12,8 @@
 #define NDEBUG
 #include <debug.h>
 
+#include <internal/spinlock.h>
+
 #undef KeAcquireSpinLock
 #undef KeReleaseSpinLock
 #undef KeRaiseIrql
@@ -61,8 +63,12 @@ KIRQL
 FASTCALL
 KeAcquireSpinLockRaiseToSynch(PKSPIN_LOCK SpinLock)
 {
-    /* Simply raise to dispatch */
-    return KfRaiseIrql(DISPATCH_LEVEL);
+    KIRQL OldIrql;
+
+    /* Raise to synch and acquire the lock */
+    KeRaiseIrql(SYNCH_LEVEL, &OldIrql);
+    KxAcquireSpinLock(SpinLock);
+    return OldIrql;
 }
 
 /*
@@ -84,8 +90,12 @@ KIRQL
 FASTCALL
 KfAcquireSpinLock(PKSPIN_LOCK SpinLock)
 {
-    /* Simply raise to dispatch */
-    return KfRaiseIrql(DISPATCH_LEVEL);
+    KIRQL OldIrql;
+
+    /* Raise to dispatch and acquire the lock, DBG marks the owner like on x86 */
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    KxAcquireSpinLock(SpinLock);
+    return OldIrql;
 }
 
 /*
@@ -96,7 +106,8 @@ FASTCALL
 KfReleaseSpinLock(PKSPIN_LOCK SpinLock,
                   KIRQL OldIrql)
 {
-    /* Simply lower IRQL back */
+    /* Release the lock and lower IRQL back */
+    KxReleaseSpinLock(SpinLock);
     KeLowerIrql(OldIrql);
 }
 
@@ -107,8 +118,11 @@ KIRQL
 FASTCALL
 KeAcquireQueuedSpinLock(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber)
 {
-    /* Simply raise to dispatch */
-    return KfRaiseIrql(DISPATCH_LEVEL);
+    KIRQL OldIrql;
+
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    KxAcquireSpinLock(KeGetCurrentPrcb()->LockQueue[LockNumber].Lock);
+    return OldIrql;
 }
 
 /*
@@ -118,8 +132,11 @@ KIRQL
 FASTCALL
 KeAcquireQueuedSpinLockRaiseToSynch(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber)
 {
-    /* Simply raise to dispatch */
-    return KfRaiseIrql(DISPATCH_LEVEL);
+    KIRQL OldIrql;
+
+    KeRaiseIrql(SYNCH_LEVEL, &OldIrql);
+    KxAcquireSpinLock(KeGetCurrentPrcb()->LockQueue[LockNumber].Lock);
+    return OldIrql;
 }
 
 /*
@@ -130,8 +147,10 @@ FASTCALL
 KeAcquireInStackQueuedSpinLock(IN PKSPIN_LOCK SpinLock,
                                IN PKLOCK_QUEUE_HANDLE LockHandle)
 {
-    /* Simply raise to dispatch */
-    LockHandle->OldIrql = KfRaiseIrql(DISPATCH_LEVEL);
+    LockHandle->LockQueue.Next = NULL;
+    LockHandle->LockQueue.Lock = SpinLock;
+    KeRaiseIrql(DISPATCH_LEVEL, &LockHandle->OldIrql);
+    KxAcquireSpinLock(LockHandle->LockQueue.Lock);
 }
 
 /*
@@ -142,8 +161,10 @@ FASTCALL
 KeAcquireInStackQueuedSpinLockRaiseToSynch(IN PKSPIN_LOCK SpinLock,
                                            IN PKLOCK_QUEUE_HANDLE LockHandle)
 {
-    /* Simply raise to dispatch */
-    LockHandle->OldIrql = KfRaiseIrql(DISPATCH_LEVEL);
+    LockHandle->LockQueue.Next = NULL;
+    LockHandle->LockQueue.Lock = SpinLock;
+    KeRaiseIrql(SYNCH_LEVEL, &LockHandle->OldIrql);
+    KxAcquireSpinLock(LockHandle->LockQueue.Lock);
 }
 
 /*
@@ -154,8 +175,8 @@ FASTCALL
 KeReleaseQueuedSpinLock(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber,
                         IN KIRQL OldIrql)
 {
-    /* Simply lower IRQL back */
-    KfLowerIrql(OldIrql);
+    KxReleaseSpinLock(KeGetCurrentPrcb()->LockQueue[LockNumber].Lock);
+    KeLowerIrql(OldIrql);
 }
 
 /*
@@ -165,8 +186,8 @@ VOID
 FASTCALL
 KeReleaseInStackQueuedSpinLock(IN PKLOCK_QUEUE_HANDLE LockHandle)
 {
-    /* Simply lower IRQL back */
-    KfLowerIrql(LockHandle->OldIrql);
+    KxReleaseSpinLock(LockHandle->LockQueue.Lock);
+    KeLowerIrql(LockHandle->OldIrql);
 }
 
 /*
@@ -177,11 +198,9 @@ FASTCALL
 KeTryToAcquireQueuedSpinLockRaiseToSynch(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber,
                                          IN PKIRQL OldIrql)
 {
-    /* Simply raise to synch */
+    /* the irql goes up even when the lock is taken */
     KeRaiseIrql(SYNCH_LEVEL, OldIrql);
-
-    /* Always return true on UP Machines */
-    return TRUE;
+    return KeTryToAcquireSpinLockAtDpcLevel(KeGetCurrentPrcb()->LockQueue[LockNumber].Lock);
 }
 
 /*
@@ -192,11 +211,8 @@ FASTCALL
 KeTryToAcquireQueuedSpinLock(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber,
                              OUT PKIRQL OldIrql)
 {
-    /* Simply raise to dispatch */
     KeRaiseIrql(DISPATCH_LEVEL, OldIrql);
-
-    /* Always return true on UP Machines */
-    return TRUE;
+    return KeTryToAcquireSpinLockAtDpcLevel(KeGetCurrentPrcb()->LockQueue[LockNumber].Lock);
 }
 
 /* EOF */

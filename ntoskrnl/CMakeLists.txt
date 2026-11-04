@@ -58,7 +58,10 @@ add_pch(ntoskrnl ${REACTOS_SOURCE_DIR}/ntoskrnl/include/ntoskrnl.h "${PCH_SKIP_S
 add_dependencies(ntoskrnl psdk asm)
 add_cd_file(TARGET ntoskrnl DESTINATION reactos/system32 NO_CAB FOR all)
 
-add_subdirectory(ntkrnlmp)
+# the arm port is uniprocessor for now
+if(NOT ARCH STREQUAL "arm")
+    add_subdirectory(ntkrnlmp)
+endif()
 
 add_asm_files(ntdllsys_asm ntdll.S)
 add_library(ntdllsys ${ntdllsys_asm})

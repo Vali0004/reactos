@@ -443,9 +443,8 @@ if(NOT _WINKD_)
             list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/amd64/kdb_help.S)
             list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kdbg/i386/i386-dis.c)
         endif()
-    elseif(ARCH STREQUAL "arm")
-        list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/arm/kdserial.c)
-    elseif(ARCH STREQUAL "arm64")
+    elseif(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+        # the port comes from DBG2 or the device tree on both
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntoskrnl/kd/arm64/kdserial.c)
     endif()
 

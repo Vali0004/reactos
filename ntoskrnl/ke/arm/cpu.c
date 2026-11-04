@@ -64,29 +64,42 @@ VOID
 NTAPI
 KiSaveProcessorControlState(OUT PKPROCESSOR_STATE ProcessorState)
 {
-    //
-    // Save some critical stuff we use
-    //
-    __debugbreak();
-#if 0
-    ProcessorState->SpecialRegisters.ControlRegister = KeArmControlRegisterGet();
-    ProcessorState->SpecialRegisters.LockdownRegister = KeArmLockdownRegisterGet();
-    ProcessorState->SpecialRegisters.CacheRegister = KeArmCacheRegisterGet();
-    ProcessorState->SpecialRegisters.StatusRegister = KeArmStatusRegisterGet();
-#endif
+    PKSPECIAL_REGISTERS Special = &ProcessorState->SpecialRegisters;
+    PKARM_ARCH_STATE Arch = &ProcessorState->ArchState;
+
+    /* the thread ID registers, user TEB and kernel PCR */
+    Special->Cp15_Cr13_UsrRW = _MoveFromCoprocessor(15, 0, 13, 0, 2);
+    Special->Cp15_Cr13_UsrRO = _MoveFromCoprocessor(15, 0, 13, 0, 3);
+    Special->Cp15_Cr13_SvcRW = _MoveFromCoprocessor(15, 0, 13, 0, 4);
+
+    /* what the debugger shows of the MMU and the last abort */
+    Arch->Cp15_Cr0_CpuId = _MoveFromCoprocessor(15, 0, 0, 0, 0);
+    Arch->Cp15_Cr1_Control = _MoveFromCoprocessor(15, 0, 1, 0, 0);
+    Arch->Cp15_Cr1_AuxControl = _MoveFromCoprocessor(15, 0, 1, 0, 1);
+    Arch->Cp15_Cr1_Cpacr = _MoveFromCoprocessor(15, 0, 1, 0, 2);
+    Arch->Cp15_Cr2_Ttb0 = _MoveFromCoprocessor(15, 0, 2, 0, 0);
+    Arch->Cp15_Cr2_Ttb1 = _MoveFromCoprocessor(15, 0, 2, 0, 1);
+    Arch->Cp15_Cr2_TtbControl = _MoveFromCoprocessor(15, 0, 2, 0, 2);
+    Arch->Cp15_Cr3_Dacr = _MoveFromCoprocessor(15, 0, 3, 0, 0);
+    Arch->Cp15_Cr5_Dfsr = _MoveFromCoprocessor(15, 0, 5, 0, 0);
+    Arch->Cp15_Cr5_Ifsr = _MoveFromCoprocessor(15, 0, 5, 0, 1);
+    Arch->Cp15_Cr6_Dfar = _MoveFromCoprocessor(15, 0, 6, 0, 0);
+    Arch->Cp15_Cr6_Ifar = _MoveFromCoprocessor(15, 0, 6, 0, 2);
+    Arch->Cp15_Cr10_PrimaryMemoryRemap = _MoveFromCoprocessor(15, 0, 10, 2, 0);
+    Arch->Cp15_Cr10_NormalMemoryRemap = _MoveFromCoprocessor(15, 0, 10, 2, 1);
+    Arch->Cp15_Cr12_VBARns = _MoveFromCoprocessor(15, 0, 12, 0, 0);
 }
 
 VOID
 NTAPI
 KiRestoreProcessorControlState(PKPROCESSOR_STATE ProcessorState)
 {
-    __debugbreak();
-#if 0
-    KeArmControlRegisterSet(ProcessorState->SpecialRegisters.ControlRegister);
-    KeArmLockdownRegisterSet(ProcessorState->SpecialRegisters.LockdownRegister);
-    KeArmCacheRegisterSet(ProcessorState->SpecialRegisters.CacheRegister);
-    KeArmStatusRegisterSet(ProcessorState->SpecialRegisters.StatusRegister);
-#endif
+    PKSPECIAL_REGISTERS Special = &ProcessorState->SpecialRegisters;
+
+    /* the MMU state is not the debugger's to change, only the thread ID registers come back */
+    _MoveToCoprocessor(Special->Cp15_Cr13_UsrRW, 15, 0, 13, 0, 2);
+    _MoveToCoprocessor(Special->Cp15_Cr13_UsrRO, 15, 0, 13, 0, 3);
+    _MoveToCoprocessor(Special->Cp15_Cr13_SvcRW, 15, 0, 13, 0, 4);
 }
 
 BOOLEAN

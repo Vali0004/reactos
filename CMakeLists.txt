@@ -379,6 +379,12 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     add_subdirectory(sdk/tools/wpp)
     add_subdirectory(win32ss)
 
+    # everything in the uefi loader, see msvc.cmake
+    if(ARCH STREQUAL "arm" AND TARGET uefildr)
+        set_property(TARGET uefildr uefifreeldr_common cportlib blcmlib blrtl libcntpr fdtlib
+                     PROPERTY ARM_NO_MOVT TRUE)
+    endif()
+
     # Create the registry hives
     create_registry_hives()
 

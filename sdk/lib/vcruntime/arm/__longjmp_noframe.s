@@ -12,18 +12,13 @@
     LEAF_ENTRY __longjmp_noframe
 
     ldmia r0!, {r1,r4-r11}
-    ldmia r0!, {r1,lr,fp}
+    ldmia r0!, {r1,r2,r3}
     mov sp, r1
+    mov lr, r3
+    vmsr fpscr, r2
 
-    /* Load NEON registers */
-    vld1.64 {d0}, [r0]!
-    vld1.64 {d1}, [r0]!
-    vld1.64 {d2}, [r0]!
-    vld1.64 {d3}, [r0]!
-    vld1.64 {d4}, [r0]!
-    vld1.64 {d5}, [r0]!
-    vld1.64 {d6}, [r0]!
-    vld1.64 {d7}, [r0]!
+    /* Load the nonvolatile d8-d15 */
+    vldmia r0, {d8-d15}
 
     /* Return 1 */
     mov r0, #1

@@ -26,52 +26,56 @@
     bx lr
     LEAF_END
 
+//
+// ULONG DebugService(Service, Argument1, Argument2, Argument3, Argument4)
+//
+// the trap takes the service in r12 and the arguments in r0-r3, the
+// breakpoint after it is the one KdpStub and KdpTrap step over
+//
     LEAF_ENTRY DebugService
+    mov     r12, r0
+    mov     r0, r1
+    mov     r1, r2
+    mov     r2, r3
+    ldr     r3, [sp]
     __debugservice
-    //bkpt BREAKPOINT_PRINT // Could be prompt too, we check this later
-    bx lr
+    __debugbreak
+    bx      lr
     LEAF_END DebugService
 
+//
+// VOID DebugService2(Argument1, Argument2, Service)
+//
     LEAF_ENTRY DebugService2
-    //bkpt BREAKPOINT_LOAD_SYMBOLS // Could be unload too, we check this later
-    bx lr
+    mov     r12, r2
+    __debugservice
+    __debugbreak
+    bx      lr
     LEAF_END DebugService2
 
+//
+// VOID RtlCaptureContext(PCONTEXT ContextRecord)
+//
+// the context is the caller's, at the return address with its stack
+//
     LEAF_ENTRY RtlCaptureContext
-
-    // FIXME-PERF: Change to stmdb later
-    str r0, [a1, #CxR0]
-    str r1, [a1, #CxR1]
-    str r2, [a1, #CxR2]
-    str r3, [a1, #CxR3]
-    str r4, [a1, #CxR4]
-    str r5, [a1, #CxR5]
-    str r6, [a1, #CxR6]
-    str r7, [a1, #CxR7]
-    str r8, [a1, #CxR8]
-    str r9, [a1, #CxR9]
-    str r10, [a1, #CxR10]
-    str r11, [a1, #CxR11]
-    str r12, [a1, #CxR12]
-
-    str sp, [a1, #CxSp]
-    str lr, [a1, #CxLr]
-
-    /* Need to do this indirectly, since "str pc, [a1, #CxPc]" generates
-       unpredictable behavior (error A2193) */
-    mov ip, pc
-    str ip, [a1, #CxPc]
-    mrs ip, spsr
-    str ip, [a1, #CxCpsr]
-
-    // FIXME: Fpscr and remaining stuff
-
-    /* Set flags */
-    mov32 r0, #CONTEXT_FULL
-    str ip, [a1, #CxContextFlags]
-
-    /* Return */
-    bx lr
+    str     r1, [r0, #CxR1]
+    add     r1, r0, #CxR2
+    stm     r1, {r2-r12}
+    str     r0, [r0, #CxR0]
+    str     sp, [r0, #CxSp]
+    str     lr, [r0, #CxLr]
+    str     lr, [r0, #CxPc]
+    mrs     r1, apsr
+    str     r1, [r0, #CxCpsr]
+    vmrs    r1, fpscr
+    str     r1, [r0, #CxFpscr]
+    add     r1, r0, #CxD
+    vstm    r1, {d0-d15}
+    mov32   r1, 0x200007
+    str     r1, [r0, #CxContextFlags]
+    ldr     r1, [r0, #CxR1]
+    bx      lr
     LEAF_END RtlCaptureContext
 
     END

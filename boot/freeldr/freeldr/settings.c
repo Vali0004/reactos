@@ -14,6 +14,9 @@
 /* GLOBALS ********************************************************************/
 
 static CCHAR DebugString[256];
+#if DBG
+CHAR DebugChannels[100];
+#endif
 static CCHAR VideoOptions[128];
 static CCHAR DefaultOs[256];
 BOOTMGRINFO BootMgrInfo = {NULL, NULL, NULL, -1, 0};
@@ -186,6 +189,15 @@ LoadSettings(
     {
         BootMgrInfo.DebugString = DebugString;
     }
+
+#if DBG
+    /* trace channels, same syntax as the options menu, bootmgr applies them after DebugInit */
+    if (!IniReadSettingByName(BootMgrInfo.FrLdrSection, "DebugChannels",
+                              DebugChannels, sizeof(DebugChannels)))
+    {
+        *DebugChannels = ANSI_NULL;
+    }
+#endif
 
     /* Get the timeout. Keep the existing one if it is valid,
      * otherwise retrieve it from freeldr.ini */

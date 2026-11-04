@@ -27,8 +27,8 @@ char * CDECL strtok_s(char *str, const char *delim, char **ctx)
     return str;
 }
 
-#ifdef _WIN64
-void* __imp_strtok_s = strtok_s;
-#else
+#ifdef _M_IX86
 void* _imp__strtok_s = strtok_s;
+#else
+void* __imp_strtok_s = strtok_s;
 #endif

@@ -378,7 +378,7 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     while (StartPde <= EndPde)
     {
         TempPde.u.Hard.PageFrameNumber = MxGetNextPage(1);
-        MI_WRITE_VALID_PTE(StartPde, TempPde);
+        MI_WRITE_VALID_PDE(StartPde, TempPde);
 
         PointerPte = MiPteToAddress(StartPde);
         RtlZeroMemory(PointerPte, PAGE_SIZE);
@@ -398,7 +398,7 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         // Get a page
         //
         TempPde.u.Hard.PageFrameNumber = MxGetNextPage(1);
-        MI_WRITE_VALID_PTE(StartPde, TempPde);
+        MI_WRITE_VALID_PDE(StartPde, TempPde);
 
         //
         // Zero out the page table
@@ -424,7 +424,7 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         // Get a page
         //
         TempPde.u.Hard.PageFrameNumber = MxGetNextPage(1);
-        MI_WRITE_VALID_PTE(StartPde, TempPde);
+        MI_WRITE_VALID_PDE(StartPde, TempPde);
 
         //
         // Zero out the page table
@@ -515,7 +515,7 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     PageFrameIndex = MiRemoveAnyPage(0);
     TempPde = ValidKernelPdeLocal;
     TempPde.u.Hard.PageFrameNumber = PageFrameIndex;
-    MI_WRITE_VALID_PTE(StartPde, TempPde);
+    MI_WRITE_VALID_PDE(StartPde, TempPde);
     PsGetCurrentProcess()->Pcb.DirectoryTableBase[1] = PageFrameIndex << PAGE_SHIFT;
 
     /* Flush the TLB */

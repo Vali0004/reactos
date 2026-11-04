@@ -2,15 +2,29 @@
 #ifdef _M_ARM
 
 #include <kxarm.h>
+    TEXTAREA
 
+    /* The wrapped object follows the vtable pointer */
+#ifdef _MSC_VER
     MACRO
     DEFINE_WRAPPER_FUNC $n, $off, $x
-        LCLS _FuncName
-_FuncName SETS "_wrapper_func_":CC:"$n"
-        NESTED_ENTRY $_FuncName
-            __assertfail
-        NESTED_END $_FuncName
+    LEAF_ENTRY wrapper_func_$n
+    ldr     r0, [r0, #4]
+    ldr     r12, [r0]
+    ldr     r12, [r12, #$off]
+    bx      r12
+    LEAF_END wrapper_func_$n
     MEND
+#else
+.macro DEFINE_WRAPPER_FUNC n, off, x
+    LEAF_ENTRY wrapper_func_\n
+    ldr     r0, [r0, #4]
+    ldr     r12, [r0]
+    ldr     r12, [r12, #\off]
+    bx      r12
+    LEAF_END wrapper_func_\n
+.endm
+#endif
 
 #elif defined(_M_ARM64)
 #include <kxarm64.h>

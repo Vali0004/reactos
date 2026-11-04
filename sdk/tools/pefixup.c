@@ -31,7 +31,8 @@ enum fixup_mode
     MODE_KERNELDRIVER,
     MODE_WDMDRIVER,
     MODE_KERNELDLL,
-    MODE_KERNEL
+    MODE_KERNEL,
+    MODE_ARMFORWARDERS
 };
 
 void *rva_to_ptr(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header, DWORD rva)
@@ -355,6 +356,46 @@ static int change_section_attribs(char* section_attribs, unsigned char* buffer, 
     return 0;
 }
 
+/*
+ * lld 21 sets the thumb bit on every arm export rva, forwarder strings too.
+ * a string has a NUL before it, a non-NUL byte there means the bit is bogus.
+ */
+static int fix_arm_forwarders(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
+{
+    PIMAGE_DATA_DIRECTORY dir;
+    PIMAGE_EXPORT_DIRECTORY exports;
+    DWORD *functions, i, rva;
+    unsigned char *str;
+
+    if (nt_header->FileHeader.Machine != IMAGE_FILE_MACHINE_ARMNT)
+        return 0;
+
+    dir = &nt_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (!dir->VirtualAddress || !dir->Size)
+        return 0;
+
+    exports = rva_to_ptr(buffer, nt_header, dir->VirtualAddress);
+    if (!exports)
+        return 0;
+
+    functions = rva_to_ptr(buffer, nt_header, exports->AddressOfFunctions);
+    if (!functions)
+        return 0;
+
+    for (i = 0; i < exports->NumberOfFunctions; i++)
+    {
+        rva = functions[i];
+        if (!(rva & 1) || (rva <= dir->VirtualAddress) || (rva >= dir->VirtualAddress + dir->Size))
+            continue;
+
+        str = rva_to_ptr(buffer, nt_header, rva);
+        if (str && str[-1] != 0)
+            functions[i] = rva & ~1;
+    }
+
+    return 0;
+}
+
 static
 void
 print_usage(void)
@@ -366,6 +407,7 @@ print_usage(void)
            "  --wdmdriver           Fix code, data and resource sections for WDM drivers;\n"
            "  --kerneldll           Fix code, data and resource sections for Kernel-Mode DLLs;\n"
            "  --kernel              Fix code, data and resource sections for kernels;\n"
+           "  --armforwarders       Fix the forwarder rvas lld marks as thumb code;\n"
            "\n"
            "and/or a combination of the following ones:\n"
            "  --section:name[=newname][,[[!]{CDEIKOMPRSUW}][A{1248PTSX}]]\n"
@@ -425,6 +467,12 @@ int main(int argc, char **argv)
             if (mode != MODE_NONE)
                 goto mode_error;
             mode = MODE_KERNEL;
+        }
+        else if (strcmp(&argv[i][2], "armforwarders") == 0)
+        {
+            if (mode != MODE_NONE)
+                goto mode_error;
+            mode = MODE_ARMFORWARDERS;
         }
         else if (strncmp(&argv[i][2], "section:", 8) == 0)
         {
@@ -503,6 +551,8 @@ int main(int argc, char **argv)
     {
         if (mode == MODE_LOADCONFIG)
             result = add_loadconfig(buffer, nt_header);
+        else if (mode == MODE_ARMFORWARDERS)
+            result = fix_arm_forwarders(buffer, nt_header);
         else
             result = driver_fixup(mode, buffer, nt_header);
     }

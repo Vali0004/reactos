@@ -410,6 +410,13 @@ VOID RunLoader(VOID)
 
     /* Debugger main initialization */
     DebugInit(GetBootMgrInfo()->DebugString);
+#if DBG
+    {
+        extern CHAR DebugChannels[];
+        if (*DebugChannels)
+            DbgParseDebugChannels(DebugChannels);
+    }
+#endif
 
     /* UI main initialization. If it fails, fall back to default UI. */
     if (!UiInitialize(TRUE))

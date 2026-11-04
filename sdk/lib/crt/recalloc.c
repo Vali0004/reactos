@@ -25,8 +25,8 @@ void* __cdecl recalloc(void *mem, size_t num, size_t size)
     return ret;
 }
 
-#ifdef _WIN64
-void* __imp__recalloc = recalloc;
-#else
+#ifdef _M_IX86
 void* _imp___recalloc = recalloc;
+#else
+void* __imp__recalloc = recalloc;
 #endif

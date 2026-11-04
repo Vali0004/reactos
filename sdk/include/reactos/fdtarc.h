@@ -9,6 +9,17 @@
 
 #include <fdt.h>
 
+/* ndk/kefuncs.h only declares it when arc.h came first */
+NTSYSAPI
+PCONFIGURATION_COMPONENT_DATA
+NTAPI
+KeFindConfigurationNextEntry(
+    _In_ PCONFIGURATION_COMPONENT_DATA Child,
+    _In_ CONFIGURATION_CLASS Class,
+    _In_ CONFIGURATION_TYPE Type,
+    _In_opt_ PULONG ComponentKey,
+    _Inout_ PCONFIGURATION_COMPONENT_DATA *NextLink);
+
 /**
  * @brief Returns the physical address and size of the loader's device tree.
  *

@@ -598,7 +598,7 @@ KdIoPrintf(
 extern const CSTRING KdbPromptStr;
 #endif
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
 /* Prints a code address as module+offset when it falls in a loaded image */
 static
 VOID
@@ -644,20 +644,43 @@ KdpPrintExceptionBacktrace(
     ULONG_PTR Frame;
     ULONG Depth;
 
+#ifdef _M_ARM
+    KdIoPrintf("  Info[1] %p SP %p R0 %p R1 %p R2 %p\n",
+               (PVOID)(ULONG_PTR)ExceptionRecord->ExceptionInformation[1],
+               (PVOID)Context->Sp,
+               (PVOID)Context->R0,
+               (PVOID)Context->R1,
+               (PVOID)Context->R2);
+
+    /* raw first, the module walk below can fault this early */
+    KdIoPrintf("  PC %p LR %p R11 %p\n", (PVOID)Context->Pc, (PVOID)Context->Lr, (PVOID)Context->R11);
+    for (Frame = Context->R11, Depth = 0; Depth < 12; Depth++)
+    {
+        if ((Frame & 3) || (Frame < (ULONG_PTR)MmSystemRangeStart))
+            break;
+        KdIoPrintf("  frame %p lr %p\n", (PVOID)Frame, (PVOID)((PULONG_PTR)Frame)[1]);
+        Frame = ((PULONG_PTR)Frame)[0];
+    }
+#else
     KdIoPrintf("  Info[1] %p SP %p X0 %p X1 %p X2 %p\n",
                (PVOID)(ULONG_PTR)ExceptionRecord->ExceptionInformation[1],
                (PVOID)Context->Sp,
                (PVOID)Context->X0,
                (PVOID)Context->X1,
                (PVOID)Context->X2);
+#endif
     KdpPrintCodeAddress("PC", Context->Pc);
     KdpPrintCodeAddress("LR", Context->Lr);
 
     /* Every frame starts with the caller's frame pointer and return address */
+#ifdef _M_ARM
+    Frame = Context->R11;
+#else
     Frame = Context->Fp;
+#endif
     for (Depth = 0; Depth < 12; Depth++)
     {
-        if ((Frame & 7) ||
+        if ((Frame & (sizeof(ULONG_PTR) - 1)) ||
             (Frame < (ULONG_PTR)MmSystemRangeStart) ||
             !MmIsAddressValid((PVOID)Frame) ||
             !MmIsAddressValid((PVOID)(Frame + sizeof(ULONG_PTR))))
@@ -709,7 +732,7 @@ KdSendPacket(
                        ExceptionRecord->ExceptionFlags,
                        WaitStateChange->u.Exception.FirstChance ? "FirstChance" : "LastChance",
                        ExceptionRecord->ExceptionInformation[0]);
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
             if (ExceptionRecord->ExceptionCode != STATUS_BREAKPOINT)
                 KdpPrintExceptionBacktrace(ExceptionRecord);
 #endif

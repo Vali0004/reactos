@@ -153,6 +153,51 @@ UefiFindAcpiTable(
     return NULL;
 }
 
+#if defined(_M_ARM) || defined(_M_ARM64)
+/**
+ * @brief Finds the console uart in the firmware device tree, u-boot has no ACPI.
+ */
+static
+BOOLEAN
+UefiGetDtbSerialPort(
+    _Out_ PUSHORT Subtype,
+    _Out_ PULONG64 Address)
+{
+    static const EFI_GUID FdtGuid =
+        {0xb1b621d5, 0xf19c, 0x41a5, {0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0}};
+    PVOID Fdt = NULL;
+    LONG Node;
+    UINTN i;
+
+    for (i = 0; i < GlobalSystemTable->NumberOfTableEntries; i++)
+    {
+        if (!memcmp(&GlobalSystemTable->ConfigurationTable[i].VendorGuid, &FdtGuid, sizeof(FdtGuid)))
+        {
+            Fdt = GlobalSystemTable->ConfigurationTable[i].VendorTable;
+            break;
+        }
+    }
+
+    if (!Fdt || !FdtCheckHeader(Fdt))
+        return FALSE;
+
+    Node = FdtStdoutNode(Fdt);
+    if (Node < 0)
+        Node = FdtFindCompatible(Fdt, -1, "arm,pl011");
+    if (Node < 0)
+        return FALSE;
+
+    if (FdtIsCompatible(Fdt, Node, "arm,pl011") || FdtIsCompatible(Fdt, Node, "arm,sbsa-uart"))
+        *Subtype = DBG2_SERIAL_PL011;
+    else if (FdtIsCompatible(Fdt, Node, "ns16550a") || FdtIsCompatible(Fdt, Node, "ns16550"))
+        *Subtype = DBG2_SERIAL_16550;
+    else
+        return FALSE;
+
+    return FdtGetReg(Fdt, Node, 0, Address, NULL);
+}
+#endif
+
 /**
  * @brief Finds the first memory mapped serial port the firmware lists in DBG2.
  */
@@ -169,7 +214,13 @@ UefiGetDebugSerialPort(
 
     Dbg2 = (PDBG2_TABLE)UefiFindAcpiTable(DBG2_SIGNATURE);
     if ((Dbg2 == NULL) || (Dbg2->Header.Length < sizeof(*Dbg2)))
+    {
+#if defined(_M_ARM) || defined(_M_ARM64)
+        return UefiGetDtbSerialPort(Subtype, Address);
+#else
         return FALSE;
+#endif
+    }
 
     End = (PUCHAR)Dbg2 + Dbg2->Header.Length;
     Current = (PUCHAR)Dbg2 + Dbg2->DeviceInfoOffset;

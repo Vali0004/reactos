@@ -17,6 +17,10 @@ set_module_type(kdcom kerneldll ENTRYPOINT 0)
 set_subsystem(kdcom native)
 add_importlibs(kdcom ntoskrnl hal)
 target_link_libraries(kdcom cportlib fdtlib strtol)
+if(ARCH STREQUAL "arm")
+    # fdtlib's strcspn, ntoskrnl does not export it
+    target_link_libraries(kdcom libcntpr)
+endif()
 add_dependencies(kdcom psdk bugcodes)
 if(GDB) ## See PR #5187
     set(KDCOM_NAME_ON_CD kdser.dll)

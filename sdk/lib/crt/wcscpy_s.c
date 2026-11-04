@@ -27,8 +27,8 @@ errno_t CDECL wcscpy_s(wchar_t* wcDest, size_t numElement, const wchar_t *wcSrc)
     return 0;
 }
 
-#ifdef _WIN64
-void* __imp_wcscpy_s = wcscpy_s;
-#else
+#ifdef _M_IX86
 void* _imp__wcscpy_s = wcscpy_s;
+#else
+void* __imp_wcscpy_s = wcscpy_s;
 #endif

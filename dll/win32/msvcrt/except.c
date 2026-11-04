@@ -130,7 +130,7 @@ void *find_catch_handler( void *object, uintptr_t frame, uintptr_t exc_base,
     return NULL;
 }
 
-#ifndef __i386__  /* i386 implementation is in except_i386.c */
+#if !defined(__i386__) && !defined(__arm__)  /* i386 implementation is in except_i386.c, arm is in except_arm.c */
 
 typedef struct
 {

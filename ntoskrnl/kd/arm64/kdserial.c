@@ -205,6 +205,14 @@ KdpMapUart(
     if (PointerPte < MiAddressToPte(MM_HAL_VA_START))
         return NULL;
 
+#ifdef _M_ARM
+    /* armv7 small page: XN, shareable device (B), kernel read/write (AP0) */
+    TempPte.u.Long = ((ULONG)PhysicalAddress & ~(PAGE_SIZE - 1)) | 0x1 | 0x2 | 0x4 | 0x10;
+    *PointerPte = TempPte;
+
+    __dsb(_ARM_BARRIER_ISHST);
+    __isb(_ARM_BARRIER_SY);
+#else
     TempPte.u.Long = 0;
     TempPte.u.Hard.Valid = 1;
     TempPte.u.Hard.NotLargePage = 1;
@@ -218,6 +226,7 @@ KdpMapUart(
 
     __dsb(_ARM64_BARRIER_ISHST);
     __isb(_ARM64_BARRIER_SY);
+#endif
 
     return (PUCHAR)MiPteToAddress(PointerPte) + BYTE_OFFSET(PhysicalAddress);
 }

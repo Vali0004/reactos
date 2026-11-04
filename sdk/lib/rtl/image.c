@@ -387,6 +387,28 @@ RtlImageRvaToVa(
                    (ULONG_PTR)SWAPD(Section->VirtualAddress));
 }
 
+#ifdef _M_ARM
+/* thumb-2 movw and movt split imm16 into imm4:i:imm3:imm8 */
+static
+ULONG
+RtlpThumbMovImm(
+    _In_ PUSHORT Insn)
+{
+    return ((Insn[0] & 0x000F) << 12) | ((Insn[0] & 0x0400) << 1) |
+           ((Insn[1] & 0x7000) >> 4) | (Insn[1] & 0x00FF);
+}
+
+static
+VOID
+RtlpThumbSetMovImm(
+    _Inout_ PUSHORT Insn,
+    _In_ USHORT Imm)
+{
+    Insn[0] = (Insn[0] & 0xFBF0) | ((Imm >> 12) & 0x000F) | ((Imm >> 1) & 0x0400);
+    Insn[1] = (Insn[1] & 0x8F00) | ((Imm << 4) & 0x7000) | (Imm & 0x00FF);
+}
+#endif
+
 PIMAGE_BASE_RELOCATION
 NTAPI
 LdrProcessRelocationBlockLongLong(
@@ -401,6 +423,9 @@ LdrProcessRelocationBlockLongLong(
     PUSHORT ShortPtr;
     PULONG LongPtr;
     PULONGLONG LongLongPtr;
+#ifdef _M_ARM
+    ULONG Value;
+#endif
 
     for (i = 0; i < Count; i++)
     {
@@ -441,6 +466,15 @@ LdrProcessRelocationBlockLongLong(
             LongLongPtr = (PUINT64)RVA(Address, Offset);
             *LongLongPtr = SWAPQ(*LongLongPtr) + Delta;
             break;
+
+#ifdef _M_ARM
+        case 7: /* IMAGE_REL_BASED_THUMB_MOV32, a movw and movt pair */
+            Value = RtlpThumbMovImm(ShortPtr) | (RtlpThumbMovImm(ShortPtr + 2) << 16);
+            Value += (ULONG)Delta;
+            RtlpThumbSetMovImm(ShortPtr, (USHORT)Value);
+            RtlpThumbSetMovImm(ShortPtr + 2, (USHORT)(Value >> 16));
+            break;
+#endif
 
         case IMAGE_REL_BASED_HIGHADJ:
         case IMAGE_REL_BASED_MIPS_JMPADDR:

@@ -168,21 +168,41 @@ elseif(ARCH STREQUAL "amd64")
         math/libm_sse2/sinf.asm
     )
 elseif(ARCH STREQUAL "arm")
+    # the old arm asm math was assert stubs, the C versions match arm64
     list(APPEND LIBCNTPR_MATH_SOURCE
         math/__cos.c
+        math/__math_divzero.c
+        math/__math_invalid.c
+        math/__math_oflow.c
+        math/__math_uflow.c
+        math/__math_xflow.c
         math/__rem_pio2.c
         math/__rem_pio2_large.c
         math/__sin.c
-        math/cos.c
+        math/__tan.c
+        math/atan.c
+        math/ceil.c
         math/ceilf.c
+        math/cos.c
+        math/exp.c
+        math/exp_data.c
         math/fabs.c
         math/fabsf.c
+        math/floor.c
         math/floorf.c
+        math/fmod.c
+        math/ldexp.c
+        math/log.c
+        math/log_data.c
+        math/log10.c
+        math/pow.c
+        math/pow_data.c
         math/sin.c
-        math/__math_invalid.c
         math/sqrt.c
         math/sqrt_data.c
         math/sqrtf.c
+        math/tan.c
+        math/arm/atan2.c
         math/arm/__rt_sdiv.c
         math/arm/__rt_sdiv64_worker.c
         math/arm/__rt_udiv.c
@@ -199,40 +219,29 @@ elseif(ARCH STREQUAL "arm")
         math/arm/__u64tos.c
         math/arm/__64tof.h
     )
+    list(APPEND LIBCNTPR_MATH_ASM_SOURCE
+        math/arm/__rt_sdiv64.s
+        math/arm/__rt_srsh.s
+        math/arm/__rt_udiv64.s
+    )
     list(APPEND CRT_MATH_SOURCE
         math/_hypotf.c
+        math/_logb.c
+        math/_logbf.c
         math/acosf.c
         math/asinf.c
         math/atan2f.c
         math/atanf.c
         math/coshf.c
         math/expf.c
-        math/fabsf.c
         math/fmodf.c
+        math/ilogb.c
+        math/logb.c
         math/modff.c
         math/sinf.c
         math/sinhf.c
         math/tanf.c
         math/tanhf.c
-    )
-    list(APPEND LIBCNTPR_MATH_ASM_SOURCE
-        math/arm/atan.s
-        math/arm/atan2.s
-        math/arm/ceil.s
-        math/arm/exp.s
-        math/arm/fmod.s
-        math/arm/floor.s
-        math/arm/ldexp.s
-        math/arm/log.s
-        math/arm/log10.s
-        math/arm/pow.s
-        math/arm/tan.s
-        math/arm/__rt_sdiv64.s
-        math/arm/__rt_srsh.s
-        math/arm/__rt_udiv64.s
-    )
-    list(APPEND CRT_MATH_ASM_SOURCE
-        math/arm/_logb.s
     )
 elseif(ARCH STREQUAL "arm64")
     list(APPEND LIBCNTPR_MATH_SOURCE
@@ -345,7 +354,7 @@ if(ARCH STREQUAL "i386")
 elseif(ARCH STREQUAL "amd64")
     list(APPEND ATAN2_SOURCE math/_invoke_matherr.c math/amd64/_set_statfp.c math/libm_sse2/_handle_error.c math/libm_sse2/atan2.c)
 elseif(ARCH STREQUAL "arm")
-    list(APPEND ATAN2_ASM_SOURCE math/arm/atan2.s)
+    list(APPEND ATAN2_SOURCE math/arm/atan2.c math/atan.c math/_isnan.c)
 elseif(ARCH STREQUAL "arm64")
     list(APPEND ATAN2_ASM_SOURCE math/arm64/atan2.s)
 endif()

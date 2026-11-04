@@ -942,9 +942,6 @@ typedef struct _KPRCB
     ULONG64 StartCycles;
     ULONG64 GenerationTarget;
     ULONG64 CycleCounterHigh;
-#if (NTDDI_VERSION >= NTDDI_WIN8)
-    KENTROPY_TIMING_STATE EntropyTimingState;
-#endif /* (NTDDI_VERSION >= NTDDI_WIN8) */
     LONG MmSpinLockOrdering;
     ULONG PageColor;
     ULONG NodeColor;

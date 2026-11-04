@@ -14,19 +14,13 @@
     /* Store r1 (->Frame) and r4 - r11 */
     stmia r0!, {r1,r4-r11}
 
-    /* Store sp (->Sp), lr (->Pc), fp (->Fpscr) */
+    /* Store sp (->Sp), lr (->Pc), fpscr (->Fpscr) */
     mov r1, sp
-    stmia r0!, {r1,lr,fp}
+    vmrs r2, fpscr
+    stmia r0!, {r1,r2,lr}
 
-    /* Store NEON registers */
-    vst1.64 {d0}, [r0]!
-    vst1.64 {d1}, [r0]!
-    vst1.64 {d2}, [r0]!
-    vst1.64 {d3}, [r0]!
-    vst1.64 {d4}, [r0]!
-    vst1.64 {d5}, [r0]!
-    vst1.64 {d6}, [r0]!
-    vst1.64 {d7}, [r0]!
+    /* Store the nonvolatile d8-d15 */
+    vstmia r0, {d8-d15}
 
     /* Return 0 */
     mov r0, #0
@@ -34,6 +28,8 @@
 
     LEAF_END _setjmpex
 
+    IMPORT __intrinsic_setjmpex, WEAK _setjmpex
+    IMPORT __intrinsic_setjmp, WEAK _setjmpex
     IMPORT _setjmp, WEAK _setjmpex
     IMPORT setjmp, WEAK _setjmpex
 

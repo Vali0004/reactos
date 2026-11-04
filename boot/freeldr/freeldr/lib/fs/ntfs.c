@@ -24,7 +24,6 @@
  * - May crash on corrupted filesystem.
  */
 
-#ifndef _M_ARM
 #include <freeldr.h>
 
 #include <debug.h>
@@ -1194,4 +1193,3 @@ const DEVVTBL* NtfsMount(ULONG DeviceId)
     return &NtfsFuncTable;
 }
 
-#endif

@@ -71,8 +71,8 @@ KiInitializePcr(
     Pcr->MinorVersion = PCR_MINOR_VERSION;
     Pcr->StallScaleFactor = INITIAL_STALL_COUNT;
 
-    /* Interrupts stay masked until the idle loop, the IRQL goes up after KD is ready */
-    Pcr->CurrentIrql = PASSIVE_LEVEL;
+    /* nothing may dispatch before the scheduler is set up, KD lowers back to this */
+    Pcr->CurrentIrql = DISPATCH_LEVEL;
 
     Pcr->Prcb.MajorVersion = PRCB_MAJOR_VERSION;
     Pcr->Prcb.MinorVersion = PRCB_MINOR_VERSION;

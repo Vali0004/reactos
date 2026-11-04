@@ -315,6 +315,14 @@ function(set_module_type_toolchain MODULE TYPE)
     # Set the PE image version numbers from the NT OS version ReactOS is based on
     target_link_options(${MODULE} PRIVATE "/VERSION:5.01")
 
+    # see pefixup.c, lld marks forwarder strings as thumb code
+    get_target_property(_type ${MODULE} TYPE)
+    if(USE_CLANG_CL AND ARCH STREQUAL "arm" AND NOT _type STREQUAL "STATIC_LIBRARY")
+        add_custom_command(TARGET ${MODULE} POST_BUILD
+            COMMAND native-pefixup --armforwarders $<TARGET_FILE:${MODULE}>)
+        set_property(TARGET ${MODULE} APPEND PROPERTY LINK_DEPENDS $<TARGET_PROPERTY:native-pefixup,IMPORTED_LOCATION>)
+    endif()
+
     if((TYPE STREQUAL win32dll) OR (TYPE STREQUAL win32ocx) OR (TYPE STREQUAL cpl))
         target_link_options(${MODULE} PRIVATE /DLL)
     elseif(TYPE IN_LIST KERNEL_MODULE_TYPES)
@@ -620,10 +628,15 @@ endfunction()
 # handle C++ options
 # disable RTTI unless said so
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_RTTI>>,/GR,/GR->>")
-# movw/movt pairs need IMAGE_REL_BASED_THUMB_MOV32, which neither the ReactOS
-# relocator nor U-Boot's EFI loader apply, literal pools get plain HIGHLOW ones
+# u-boot's efi loader cannot apply IMAGE_REL_BASED_THUMB_MOV32, the loader uses
+# literal pools instead, only there since -mno-movt also drops dllimport on data
 if(USE_CLANG_CL AND ARCH STREQUAL "arm")
-    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-mno-movt>")
+    add_compile_options("$<$<AND:$<COMPILE_LANGUAGE:C,CXX>,$<BOOL:$<TARGET_PROPERTY:ARM_NO_MOVT>>>:/clang:-mno-movt>")
+    # exceptions unwind through the PSEH frame chain, not tables. LLVM 21 gets the
+    # frame offsets wrong when the unwind prologue meets a base pointer
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-fno-unwind-tables;/clang:-fno-asynchronous-unwind-tables>")
+    # armv7 has no vmaxnm, the builtins become calls nobody exports
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-fno-builtin-fmax;/clang:-fno-builtin-fmin;/clang:-fno-builtin-fmaxf;/clang:-fno-builtin-fminf>")
 endif()
 
 # disable exceptions unless said so

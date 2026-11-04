@@ -14,7 +14,7 @@
 
 #include <cportlib/cportlib.h>
 #include <cportlib/uartinfo.h>
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
 #include <drivers/acpi/acpi.h>
 #include <fdtarc.h>
 #endif
@@ -26,7 +26,7 @@ CPPORT KdComPort;
 CPPORT KdDebugComPort;
 #endif
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
 /* PL011 registers, the SBSA UART is the subset without the control register */
 #define KDCOM_PL011_DATA            0x00
 #define KDCOM_PL011_FLAGS           0x18
@@ -130,7 +130,7 @@ KdpPortInitialize(
     return STATUS_SUCCESS;
 }
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
 /**
  * @brief Finds the first DBG2 serial port this driver can run.
  *
@@ -451,7 +451,7 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
         }
     }
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     UNREFERENCED_PARAMETER(ComPortNumber);
     return KdpFirmwarePortInitialize(LoaderBlock, ComPortAddress, ComPortBaudRate);
 #else
@@ -506,7 +506,7 @@ VOID
 NTAPI
 KdpSendByte(IN UCHAR Byte)
 {
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     if (KdComPl011)
     {
         while (READ_REGISTER_ULONG((PULONG)(KdComPort.Address + KDCOM_PL011_FLAGS)) &
@@ -531,7 +531,7 @@ KdpPollByte(OUT PUCHAR OutByte)
     USHORT Status;
 
     /* Poll the byte */
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     if (KdComPl011)
         Status = KdpPl011GetByte(OutByte, FALSE);
     else
@@ -558,7 +558,7 @@ KdpReceiveByte(OUT PUCHAR OutByte)
     USHORT Status;
 
     /* Get the byte */
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     if (KdComPl011)
         Status = KdpPl011GetByte(OutByte, TRUE);
     else

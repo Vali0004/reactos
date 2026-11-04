@@ -182,11 +182,8 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
     /* Look at our exception code */
     switch (ExceptionRecord->ExceptionCode)
     {
-        /* Breakpoint */
+        /* Breakpoint, trapc.c already points the pc at the udf instruction */
         case STATUS_BREAKPOINT:
-
-            /* Decrement PC by four */
-            Context.Pc -= sizeof(ULONG);
             break;
 
         /* Internal exception */

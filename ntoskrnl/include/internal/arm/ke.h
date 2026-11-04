@@ -31,10 +31,10 @@ KiExceptionExit(
 #define PDR_ENTRY            2
 
 //
-// BKPT is 4 bytes long
+// The thumb breakpoint, udf #0xFE, is 2 bytes long
 //
-#define KD_BREAKPOINT_TYPE        ULONG
-#define KD_BREAKPOINT_SIZE        sizeof(ULONG)
+#define KD_BREAKPOINT_TYPE        USHORT
+#define KD_BREAKPOINT_SIZE        sizeof(USHORT)
 #define KD_BREAKPOINT_VALUE       0xDEFE
 
 //

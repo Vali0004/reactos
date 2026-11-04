@@ -12,7 +12,8 @@
 /*
  * ARM RAM rarely starts at 0, an OR would put a board's RAM at 1 GB onto the
  * page tables at 0xC0000000. The first GB of RAM goes to KSEG0 instead,
- * meminit.c keeps the loader inside it.
+ * meminit.c keeps the loader inside it. RAM stays below KSEG0, so either
+ * direction leaves an address that is already converted alone, like x86.
  */
 extern PFN_NUMBER MmArmRamBasePage;
 
@@ -20,6 +21,8 @@ FORCEINLINE
 PVOID
 VaToPa(PVOID Va)
 {
+    if ((ULONG_PTR)Va < KSEG0_BASE)
+        return Va;
     return (PVOID)((ULONG_PTR)Va - KSEG0_BASE + (MmArmRamBasePage << MM_PAGE_SHIFT));
 }
 
@@ -27,6 +30,8 @@ FORCEINLINE
 PVOID
 PaToVa(PVOID Pa)
 {
+    if ((ULONG_PTR)Pa >= KSEG0_BASE)
+        return Pa;
     return (PVOID)((ULONG_PTR)Pa - (MmArmRamBasePage << MM_PAGE_SHIFT) + KSEG0_BASE);
 }
 #elif !defined(_ZOOM2_)

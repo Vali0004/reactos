@@ -335,19 +335,46 @@ WinLdrpMapFrameBuffer(VOID)
     }
 }
 
+/* uefihw.c, the firmware's debug uart from DBG2 or the device tree */
+BOOLEAN
+UefiGetDebugSerialPort(
+    _Out_ PUSHORT Subtype,
+    _Out_ PULONG64 Address);
+
 /* The debug port stays reachable at its physical address */
 static
 VOID
 WinLdrpMapDebugPorts(VOID)
 {
-    ULONG_PTR Page;
+    ULONG_PTR Page, Port = (ULONG_PTR)ComPortAddress;
+    ULONG64 Address;
+    USHORT Subtype;
 
-    if (!ComPortAddress)
+    /* without a DEBUGPORT address the uart came from the firmware tables */
+    if (!Port && UefiGetDebugSerialPort(&Subtype, &Address))
+        Port = (ULONG_PTR)Address;
+    if (!Port)
         return;
 
-    Page = (ULONG_PTR)ComPortAddress & ~(MM_PAGE_SIZE - 1);
+    Page = Port & ~(MM_PAGE_SIZE - 1);
     if (!MempIsPageMapped(Page))
         MempMapSinglePage(Page, Page, ARM_PTE_DEVICE);
+}
+
+/* the loader may still run on a firmware stack the memory map leaves out */
+static
+VOID
+WinLdrpMapCurrentStack(VOID)
+{
+    ULONG_PTR Address, Here = (ULONG_PTR)&Address;
+
+    for (Address = ALIGN_DOWN_BY(Here, MM_PAGE_SIZE) - (16 * MM_PAGE_SIZE);
+         Address <= ALIGN_DOWN_BY(Here, MM_PAGE_SIZE) + (4 * MM_PAGE_SIZE);
+         Address += MM_PAGE_SIZE)
+    {
+        if (!MempIsPageMapped(Address))
+            MempMapSinglePage(Address, Address, ARM_PTE_NORMAL);
+    }
 }
 
 static
@@ -378,6 +405,9 @@ WinLdrSetProcessorContext(
     TRACE("WinLdrSetProcessorContext\n");
 
     _disable();
+    WinLdrpMapCurrentStack();
+    TRACE("switching to the kernel tables, L1 %p, directory %p, stack %p\n",
+          FirstLevelTable, PageDirectory, &OperatingSystemVersion);
 
     WinLdrpTrace("freeldr: switching to the kernel tables, L1 %p, directory %p\n",
                  FirstLevelTable, PageDirectory);
@@ -397,7 +427,8 @@ WinLdrSetupMachineDependent(
 
     /* The load options are already a kernel address, the loader still runs on its own tables */
     WinLdrpScreenTrace = (NtLdrGetOption(VaToPa(LoaderBlock->LoadOptions), "DEBUGPORT=SCREEN") != NULL);
-    LoaderBlock->u.I386.CommonDataArea = WinLdrpScreenTrace ? (PVOID)WinLdrpEarlyPrint : NULL;
+    /* the kernel traces through this until KD is up, serial gets it too */
+    LoaderBlock->u.I386.CommonDataArea = (PVOID)WinLdrpEarlyPrint;
     WinLdrpTrace("freeldr: boot services left\n");
 
     SharedUserDataAddress = MmAllocateMemoryWithType(MM_PAGE_SIZE, LoaderStartupPcrPage);

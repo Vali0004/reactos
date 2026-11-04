@@ -58,15 +58,11 @@ typedef const DEVVTBL* (*PFS_MOUNT)(ULONG DeviceId);
 
 PFS_MOUNT FileSystems[] =
 {
-#ifndef _M_ARM
     IsoMount,
-#endif
     FatMount,
     BtrFsMount,
-#ifndef _M_ARM
     NtfsMount,
     ExtMount,
-#endif
 #if defined(_M_IX86) || defined(_M_AMD64)
 #ifndef UEFIBOOT
     PxeMount,
@@ -582,25 +578,21 @@ FsGetVolumeSize(
     /* HACK: Since we don't currently use a virtual table function member,
      * we instead do a manual lookup over the file-system name.
      * The ordering follows that of the FileSystems[] table. */
-#ifndef _M_ARM
     if (!_wcsicmp(ServiceName, L"cdfs"))
         pFsGetVolumeSize = IsoGetVolumeSize;
     else
-#endif
     if (!_wcsicmp(ServiceName, L"fastfat") || !_wcsicmp(ServiceName, L"vfatfs"))
         pFsGetVolumeSize = FatGetVolumeSize;
     else
     if (!_wcsicmp(ServiceName, L"btrfs"))
         pFsGetVolumeSize = BtrFsGetVolumeSize;
     else
-#ifndef _M_ARM
     if (!_wcsicmp(ServiceName, L"ntfs"))
         pFsGetVolumeSize = NtfsGetVolumeSize;
     else
     if (!_wcsicmp(ServiceName, L"ext2fs"))
         pFsGetVolumeSize = ExtGetVolumeSize;
     else
-#endif
     {
         ERR("Unsupported file system '%S' on storage device %lu\n", ServiceName, DeviceId);
         return EIO; // ENXIO;

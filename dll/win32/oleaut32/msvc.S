@@ -3,9 +3,37 @@
 
 #include <kxarm.h>
 
+    TEXTAREA
+
+// call_method(func, nb_stk_args, stk_args, reg_args), see thunks.c
+// reg_args holds s0-s15 then r0-r3
     LEAF_ENTRY call_method
-        __assertfail
+    push    {r11, lr}
+    mov     r11, sp
+    lsls    r1, r1, #2
+    beq     call_method_args_done
+    add     r2, r2, r1
+LABEL(call_method_copy)
+    ldr     r12, [r2, #-4]!
+    str     r12, [sp, #-4]!
+    subs    r1, r1, #4
+    bgt     call_method_copy
+LABEL(call_method_args_done)
+    vldm    r3!, {s0-s15}
+    mov     r12, r0
+    ldm     r3, {r0-r3}
+    blx     r12
+    mov     sp, r11
+    pop     {r11, pc}
     LEAF_END call_method
+
+    LEAF_ENTRY call_float_method
+    b       call_method
+    LEAF_END call_float_method
+
+    LEAF_ENTRY call_double_method
+    b       call_method
+    LEAF_END call_double_method
 
 #elif defined(_M_AMD64)
 

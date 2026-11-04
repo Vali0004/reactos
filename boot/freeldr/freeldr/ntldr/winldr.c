@@ -1511,7 +1511,12 @@ LoadAndBootWindowsCommon(
     WinLdrSetProcessorContext(OperatingSystemVersion);
 
     /* Save final value of LoaderPagesSpanned */
+#ifdef _M_ARM
+    /* KSEG0 starts at the RAM base on arm, the kernel adds the span to it */
+    LoaderBlock->Extension->LoaderPagesSpanned = MmGetLoaderPagesSpanned() - MmArmRamBasePage;
+#else
     LoaderBlock->Extension->LoaderPagesSpanned = MmGetLoaderPagesSpanned();
+#endif
 
     TRACE("Hello from paged mode, KiSystemStartup %p, LoaderBlockVA %p!\n",
           KiSystemStartup, LoaderBlockVA);

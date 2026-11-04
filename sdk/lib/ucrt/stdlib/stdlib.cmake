@@ -24,7 +24,9 @@ list(APPEND UCRT_STDLIB_SOURCES
 )
 
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    if(ARCH STREQUAL "arm64")
+    if(ARCH STREQUAL "arm")
+        add_asm_files(UCRT_STDLIB_ASM stdlib/arm/clang-hacks.s)
+    elseif(ARCH STREQUAL "arm64")
         add_asm_files(UCRT_STDLIB_ASM stdlib/arm64/clang-hacks.s)
     else()
         add_asm_files(UCRT_STDLIB_ASM stdlib/clang-hacks.s)

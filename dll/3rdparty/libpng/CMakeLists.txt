@@ -6,7 +6,7 @@ add_definitions(
     -DPNG_BUILD_DLL)
 
 # the NEON sources are not built, clang turns the optimizations on by itself
-if(ARCH STREQUAL "arm64")
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
     add_definitions(-DPNG_ARM_NEON_OPT=0)
 endif()
 
