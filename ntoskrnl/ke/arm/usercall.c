@@ -308,36 +308,5 @@ KiInitializeUserApc(IN PKEXCEPTION_FRAME ExceptionFrame,
     TrapFrame->Cpsr |= CPSRC_THUMB;
 }
 
-NTSTATUS
-NTAPI
-KeUserModeCallback(IN ULONG RoutineIndex,
-                   IN PVOID Argument,
-                   IN ULONG ArgumentLength,
-                   OUT PVOID *Result,
-                   OUT PULONG ResultLength)
-{
-    ASSERT(FALSE);
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-NTSTATUS
-NTAPI
-KiCallUserMode(
-    IN PVOID *OutputBuffer,
-    IN PULONG OutputLength)
-{
-    ASSERT(FALSE);
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-NTSTATUS
-NTAPI
-NtCallbackReturn(
-    _In_ PVOID Result,
-    _In_ ULONG ResultLength,
-    _In_ NTSTATUS CallbackStatus)
-{
-    ASSERT(FALSE);
-    return STATUS_NOT_IMPLEMENTED;
-}
+/* user mode callbacks are in callout.c */
 

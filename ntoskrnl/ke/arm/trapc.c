@@ -334,15 +334,19 @@ KiArmUndefinedTrap(
     return KiArmTrapReturn(TrapFrame);
 }
 
+NTSTATUS
+NTAPI
+PsConvertToGuiThread(VOID);
+
 /**
  * @brief Runs a system service.
  *
  * The number comes in r12, the first four arguments in r0-r3 and the rest
  * on the caller's stack, like a call.
  */
+static
 PKTRAP_FRAME
-NTAPI
-KiArmSystemServiceTrap(
+KiArmSystemService(
     _Inout_ PKTRAP_FRAME TrapFrame,
     _Inout_ PKEXCEPTION_FRAME ExceptionFrame)
 {
@@ -392,7 +396,7 @@ KiArmSystemServiceTrap(
             KeGdiFlushUserBatch();
     }
 
-    /* FIXME: the first win32k call has to turn the thread into a GUI thread, which moves its stack */
+    /* KiArmSystemServiceTrap already made the thread a GUI thread when it had to */
     DescriptorTable = &((PKSERVICE_TABLE_DESCRIPTOR)Thread->ServiceTable)[TableIndex];
     if (ServiceNumber >= DescriptorTable->Limit)
     {
@@ -441,6 +445,75 @@ Exit:
     Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
     Thread->PreviousMode = OldMode;
     return KiArmTrapReturn(TrapFrame);
+}
+
+/* a win32k service from a thread still on the base table converts it first */
+static
+BOOLEAN
+KiArmServiceNeedsGuiThread(
+    _In_ PKTRAP_FRAME TrapFrame)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+    ULONG ServiceNumber, TableIndex;
+
+    ServiceNumber = TrapFrame->R12;
+    TableIndex = (ServiceNumber >> TABLE_OFFSET_BITS) & ((1 << TABLE_NUMBER_BITS) - 1);
+    ServiceNumber &= SERVICE_NUMBER_MASK;
+
+    return (TableIndex == WIN32K_SERVICE_INDEX) &&
+           (Thread->ServiceTable == KeServiceDescriptorTable) &&
+           (ServiceNumber >= KeServiceDescriptorTable[TableIndex].Limit);
+}
+
+/**
+ * @brief Entry of every system service, returns the trap frame to leave with.
+ *
+ * Becoming a GUI thread moves the thread to a large stack, the frames move
+ * along and the service runs on the moved ones.
+ */
+PKTRAP_FRAME
+NTAPI
+KiArmSystemServiceTrap(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_ PKEXCEPTION_FRAME ExceptionFrame)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+    PKTRAP_FRAME OldTrapFrame;
+    KPROCESSOR_MODE OldMode;
+    ULONG_PTR OldBase, OldLimit;
+    NTSTATUS Status;
+
+    if (KiArmServiceNeedsGuiThread(TrapFrame))
+    {
+        /* the conversion may call back into user mode, so link the frame like a service */
+        OldTrapFrame = Thread->TrapFrame;
+        OldMode = Thread->PreviousMode;
+        Thread->TrapFrame = TrapFrame;
+        Thread->PreviousMode = KiGetPreviousMode(TrapFrame);
+        KiArmRestoreInterrupts(TrapFrame);
+
+        OldBase = (ULONG_PTR)Thread->StackBase;
+        OldLimit = Thread->StackLimit;
+        Status = PsConvertToGuiThread();
+
+        /* everything on the old stack moved, the stack switch fixed the frame chain */
+        _disable();
+        TrapFrame = Thread->TrapFrame;
+        ExceptionFrame = (PKEXCEPTION_FRAME)TrapFrame - 1;
+        if (((ULONG_PTR)OldTrapFrame >= OldLimit) && ((ULONG_PTR)OldTrapFrame < OldBase))
+            OldTrapFrame = (PKTRAP_FRAME)((ULONG_PTR)OldTrapFrame + ((ULONG_PTR)Thread->StackBase - OldBase));
+
+        Thread->TrapFrame = OldTrapFrame;
+        Thread->PreviousMode = OldMode;
+
+        if (!NT_SUCCESS(Status))
+        {
+            TrapFrame->R0 = (ULONG)Status;
+            return TrapFrame;
+        }
+    }
+
+    return KiArmSystemService(TrapFrame, ExceptionFrame);
 }
 
 static

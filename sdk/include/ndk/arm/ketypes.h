@@ -744,6 +744,10 @@ typedef struct _KSWITCH_FRAME
     ULONG R10;
     ULONG R11;
     ULONG Return;
+    /* vfp state of the thread, traps leave it alone so only a switch saves it */
+    ULONG Fpscr;
+    ULONG Pad2;
+    ULONGLONG D[32];
 } KSWITCH_FRAME, *PKSWITCH_FRAME;
 
 //

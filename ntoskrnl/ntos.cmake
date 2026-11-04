@@ -381,11 +381,13 @@ elseif(ARCH STREQUAL "arm")
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ex/arm/ioport.s
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/boot.s
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/callout.s
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/ctxswtch.s
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/trap.s)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntoskrnl/config/arm/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/kd64/arm/kdarm.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/callout.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/cpu.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/exp.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/interrupt.c

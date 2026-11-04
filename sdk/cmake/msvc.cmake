@@ -637,6 +637,9 @@ if(USE_CLANG_CL AND ARCH STREQUAL "arm")
     add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-fno-unwind-tables;/clang:-fno-asynchronous-unwind-tables>")
     # armv7 has no vmaxnm, the builtins become calls nobody exports
     add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-fno-builtin-fmax;/clang:-fno-builtin-fmin;/clang:-fno-builtin-fmaxf;/clang:-fno-builtin-fminf>")
+    # traps do not save vfp, so copies must not borrow its registers, real
+    # floating point still uses vfp and the context switch keeps it per thread
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-mno-implicit-float>")
 endif()
 
 # disable exceptions unless said so

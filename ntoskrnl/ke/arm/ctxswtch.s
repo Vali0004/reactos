@@ -30,6 +30,13 @@
     stm     r12, {r4-r11}
     str     lr, [sp, #SwReturn]
 
+    /* the vfp registers belong to the thread, the a15 has 32 of them */
+    vmrs    r12, fpscr
+    str     r12, [sp, #SwFpscr]
+    add     r12, sp, #SwD
+    vstm    r12!, {d0-d15}
+    vstm    r12, {d16-d31}
+
     /* the KIPCR sits in TPIDRPRW, the low bits are reserved */
     mrc     p15, 0, r2, c13, c0, 4
     bfc     r2, #0, #12
@@ -52,6 +59,12 @@ LABEL(KiSwapContextReady)
     /* r1 and r2 still hold the old and new thread */
     ldrb    r0, [sp, #SwApcBypass]
     bl      KiSwapContextResume
+
+    add     r12, sp, #SwD
+    vldm    r12!, {d0-d15}
+    vldm    r12, {d16-d31}
+    ldr     r12, [sp, #SwFpscr]
+    vmsr    fpscr, r12
 
     add     r12, sp, #SwR4
     ldm     r12, {r4-r11}
