@@ -30,6 +30,11 @@
 #define VBE_DISPI_INDEX_YRES                 0x02
 #define VBE_DISPI_INDEX_BPP                  0x03
 #define VBE_DISPI_INDEX_ENABLE               0x04
+#define VBE_DISPI_INDEX_BANK                 0x05
+#define VBE_DISPI_INDEX_VIRT_WIDTH           0x06
+#define VBE_DISPI_INDEX_VIRT_HEIGHT          0x07
+#define VBE_DISPI_INDEX_X_OFFSET             0x08
+#define VBE_DISPI_INDEX_Y_OFFSET             0x09
   #define VBE_DISPI_DISABLED                   0x00
   #define VBE_DISPI_ENABLED                    0x01
   #define VBE_DISPI_GETCAPS                    0x02

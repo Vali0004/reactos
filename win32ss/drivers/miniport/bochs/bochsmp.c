@@ -364,6 +364,13 @@ BochsSetCurrentMode(
     Ret = BochsWriteDispIAndCheck(DeviceExtension, VBE_DISPI_INDEX_XRES, AvailableModeInfo->XResolution) &&
           BochsWriteDispIAndCheck(DeviceExtension, VBE_DISPI_INDEX_YRES, AvailableModeInfo->YResolution) &&
           BochsWriteDispIAndCheck(DeviceExtension, VBE_DISPI_INDEX_BPP, 32);
+
+    /* bochs-display scans out with the virtual width, the firmware may have left its own */
+    BochsWriteDispI(DeviceExtension, VBE_DISPI_INDEX_VIRT_WIDTH, AvailableModeInfo->XResolution);
+    BochsWriteDispI(DeviceExtension, VBE_DISPI_INDEX_VIRT_HEIGHT, AvailableModeInfo->YResolution);
+    BochsWriteDispI(DeviceExtension, VBE_DISPI_INDEX_X_OFFSET, 0);
+    BochsWriteDispI(DeviceExtension, VBE_DISPI_INDEX_Y_OFFSET, 0);
+
     /* Always enable screen, even if display settings change failed */
     BochsWriteDispI(DeviceExtension, VBE_DISPI_INDEX_ENABLE, VBE_DISPI_LFB_ENABLED | VBE_DISPI_ENABLED);
     if (!Ret)
