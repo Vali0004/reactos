@@ -132,14 +132,11 @@ FxDmaEnabler::Initialize(
     RtlZeroMemory(&deviceDescription, sizeof(DEVICE_DESCRIPTION));
 
     //
-    // Default to version 2 description (except on ARM platforms)
+    // Default to version 2 description. Windows on ARM defaults to version 3,
+    // but the ReactOS HAL implements the version 2 DMA operations only.
     //
 
-#ifdef _ARM_
-    deviceDescription.Version = DEVICE_DESCRIPTION_VERSION3;
-#else
     deviceDescription.Version = DEVICE_DESCRIPTION_VERSION2;
-#endif
 
     //
     // Make sure the device's list of enablers has been created.
