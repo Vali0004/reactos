@@ -517,6 +517,20 @@ HalpQueryIdPdo(IN PDEVICE_OBJECT DeviceObject,
         case BusQueryHardwareIDs:
 
             /* What kind of PDO is this? */
+#ifdef _M_ARM64
+            /* Without ACPI tables the HAL's child is the device tree bus driver */
+            if ((PdoType == AcpiPdo) && HalpDeviceTreePlatform)
+            {
+                CurrentId = L"DTB_HAL\\DTB0000";
+                RtlCopyMemory(Id, CurrentId, (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL));
+                Length += (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
+
+                CurrentId = L"*DTB0000";
+                RtlCopyMemory(&Id[wcslen(Id) + 1], CurrentId, (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL));
+                Length += (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
+            }
+            else
+#endif
             if (PdoType == AcpiPdo)
             {
                 /* ACPI ID */
