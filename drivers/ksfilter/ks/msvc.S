@@ -1,5 +1,8 @@
 
 #if defined(_M_ARM) || defined(_M_ARM64)
+#ifdef _M_ARM64
+#include <kxarm64.h>
+#endif
 
 #else
 
