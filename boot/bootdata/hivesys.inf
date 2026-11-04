@@ -6,6 +6,9 @@ Signature = "$Windows NT$"
 HKLM,"SYSTEM\CurrentControlSet\Control","CurrentUser",2,"USERNAME"
 HKLM,"SYSTEM\CurrentControlSet\Control","WaitToKillServiceTimeout",2,"20000"
 ;HKLM,"SYSTEM\CurrentControlSet\Control\Biosinfo","InfName",2,"biosinfo.inf"
+; hal extensions the loader matches against csrt resource groups
+HKLM,"SYSTEM\CurrentControlSet\Control\OSExtensionDatabase\VEN_OMAP&DEV_3430","HALExtension",0x00000000,"halextomap3.dll"
+
 HKLM,"SYSTEM\CurrentControlSet\Control\PnP",,0x00000012
 ; How long IopMarkBootPartition keeps polling for a boot device that is still enumerating
 HKLM,"SYSTEM\CurrentControlSet\Control\PnP","PollBootPartitionTimeout",0x00010001,30000
