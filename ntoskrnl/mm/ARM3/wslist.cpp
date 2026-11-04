@@ -241,6 +241,14 @@ TrimWsList(PMMWSL WsList)
         ASSERT(PointerPte->u.Hard.Valid);
 
         /* If the PTE was accessed, simply reset and that's the end of it */
+#ifdef _M_ARM
+        /* No hardware access tracking, every page counts as recently used */
+        if (TRUE)
+        {
+            Entry.u1.e1.Age = 0;
+            continue;
+        }
+#else
         if (PointerPte->u.Hard.Accessed)
         {
             Entry.u1.e1.Age = 0;
@@ -248,6 +256,7 @@ TrimWsList(PMMWSL WsList)
             KeInvalidateTlbEntry(Entry.u1.VirtualAddress);
             continue;
         }
+#endif
 
         /* If the entry is not so old, just age it */
         if (Entry.u1.e1.Age < 3)

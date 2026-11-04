@@ -2517,7 +2517,11 @@ MiSetSystemCodeProtection(
         else
             MI_MAKE_NO_EXECUTE_PAGE(&TempPte);
 #else
+#ifdef _M_ARM
+        TempPte.u.Hard.ReadOnly = !BooleanFlagOn(Protection, IMAGE_SCN_MEM_WRITE);
+#else
         TempPte.u.Hard.Write = BooleanFlagOn(Protection, IMAGE_SCN_MEM_WRITE);
+#endif
 #if _MI_HAS_NO_EXECUTE
         TempPte.u.Hard.NoExecute = !BooleanFlagOn(Protection, IMAGE_SCN_MEM_EXECUTE);
 #endif

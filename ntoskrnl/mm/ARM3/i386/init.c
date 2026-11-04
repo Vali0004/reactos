@@ -19,12 +19,23 @@
 
 /* Template PTE and PDE for a kernel page */
  /* FIXME: These should be PTE_GLOBAL */
+#ifdef _M_ARM
+/* ARM pages also need the access bit and a memory type */
+MMPTE ValidKernelPde = {{PTE_VALID|PTE_READWRITE|PTE_ENABLE_CACHE}};
+MMPTE ValidKernelPte = {{PTE_VALID|PTE_READWRITE|PTE_ENABLE_CACHE}};
+#else
 MMPTE ValidKernelPde = {{PTE_VALID|PTE_READWRITE|PTE_DIRTY|PTE_ACCESSED}};
 MMPTE ValidKernelPte = {{PTE_VALID|PTE_READWRITE|PTE_DIRTY|PTE_ACCESSED}};
+#endif
 
 /* The same, but for local pages */
+#ifdef _M_ARM
+MMPTE ValidKernelPdeLocal = {{PTE_VALID|PTE_READWRITE|PTE_ENABLE_CACHE}};
+MMPTE ValidKernelPteLocal = {{PTE_VALID|PTE_READWRITE|PTE_ENABLE_CACHE}};
+#else
 MMPTE ValidKernelPdeLocal = {{PTE_VALID|PTE_READWRITE|PTE_DIRTY|PTE_ACCESSED}};
 MMPTE ValidKernelPteLocal = {{PTE_VALID|PTE_READWRITE|PTE_DIRTY|PTE_ACCESSED}};
+#endif
 
 /* Template PDE for a demand-zero page */
 MMPDE DemandZeroPde  = {{MM_READWRITE << MM_PTE_SOFTWARE_PROTECTION_BITS}};
@@ -564,6 +575,7 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     RtlZeroMemory(MiPteToAddress(PointerPte), PAGE_SIZE);
     PsGetCurrentProcess()->WorkingSetPage = PageFrameIndex;
 
+#ifdef _M_IX86
     /* Check for Pentium LOCK errata */
     if (KiI386PentiumLockErrataPresent)
     {
@@ -573,6 +585,7 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         PointerPte = MiAddressToPte(KeGetPcr()->IDT);
         PointerPte->u.Hard.WriteThrough = 1;
     }
+#endif
 
     /* Release the lock */
     MiReleasePfnLock(OldIrql);

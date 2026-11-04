@@ -2326,7 +2326,10 @@ UserFault:
                 MiInitializePfn(PageFrameIndex, PointerPte, TRUE);
                 TempPte.u.Hard.PageFrameNumber = PageFrameIndex;
                 MI_MAKE_WRITE_PAGE(&TempPte);
+#ifndef _M_ARM
+                /* ARM has no copy on write bit, MI_IS_PAGE_COPY_ON_WRITE is always false there */
                 TempPte.u.Hard.CopyOnWrite = 0;
+#endif
 
                 MI_WRITE_VALID_PTE(PointerPte, TempPte);
 

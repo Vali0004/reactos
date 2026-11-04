@@ -168,22 +168,35 @@ C_ASSERT(SYSTEM_PD_SIZE == PAGE_SIZE);
 #define PTE_WRITECOMBINED_CACHE 0x0000000000000306ULL
 #define PTE_PROTECT_MASK        0x01E000000000008CULL
 #elif defined(_M_ARM)
-#define PTE_READONLY            0x200
-#define PTE_EXECUTE             0 // Not worrying about NX yet
-#define PTE_EXECUTE_READ        0 // Not worrying about NX yet
-#define PTE_READWRITE           0 // Doesn't exist on ARM
-#define PTE_WRITECOPY           0 // Doesn't exist on ARM
-#define PTE_EXECUTE_READWRITE   0 // Not worrying about NX yet
-#define PTE_EXECUTE_WRITECOPY   0 // Not worrying about NX yet
+//
+// Access Flags, ARMv7 small page descriptors: XN is bit 0, AP[2] (read only) bit 9.
+// There is no software bit left for copy on write, write copy pages are read only.
+//
+#define PTE_NO_EXECUTE          0x001
+#define PTE_NOT_WRITABLE        0x200
+#define PTE_READONLY            (PTE_NOT_WRITABLE | PTE_NO_EXECUTE)
+#define PTE_EXECUTE             PTE_NOT_WRITABLE
+#define PTE_EXECUTE_READ        PTE_NOT_WRITABLE
+#define PTE_READWRITE           PTE_NO_EXECUTE
+#define PTE_WRITECOPY           (PTE_NOT_WRITABLE | PTE_NO_EXECUTE)
+#define PTE_EXECUTE_READWRITE   0
+#define PTE_EXECUTE_WRITECOPY   PTE_NOT_WRITABLE
 #define PTE_PROTOTYPE           0x400 // Using the Shared bit
 
 //
-// Cache flags
+// State Flags, bit 1 makes a small page, there is no accessed or dirty tracking
 //
-#define PTE_ENABLE_CACHE        0
-#define PTE_DISABLE_CACHE       0x10
-#define PTE_WRITECOMBINED_CACHE 0x10
-#define PTE_PROTECT_MASK        0x610
+#define PTE_VALID               0x002
+#define PTE_ACCESSED            0
+#define PTE_DIRTY               0
+
+//
+// Cache flags as TEX C B, each with AP[0] that every accessible page needs
+//
+#define PTE_ENABLE_CACHE        0x05C // normal write back, TEX 001 C B
+#define PTE_DISABLE_CACHE       0x014 // device, B
+#define PTE_WRITECOMBINED_CACHE 0x050 // normal non cacheable, TEX 001
+#define PTE_PROTECT_MASK        0x7CD
 #else
 #error Define these please!
 #endif
@@ -1056,6 +1069,9 @@ MI_WRITE_VALID_PTE(IN PMMPTE PointerPte,
     /* The table walker only sees the new entry after a barrier */
     __dsb(_ARM64_BARRIER_ISHST);
     __isb(_ARM64_BARRIER_SY);
+#elif defined(_M_ARM)
+    __dsb(_ARM_BARRIER_ISHST);
+    __isb(_ARM_BARRIER_SY);
 #endif
 }
 
@@ -1117,6 +1133,9 @@ MI_WRITE_VALID_PDE(IN PMMPDE PointerPde,
 #ifdef _M_ARM64
     __dsb(_ARM64_BARRIER_ISHST);
     __isb(_ARM64_BARRIER_SY);
+#elif defined(_M_ARM)
+    /* The MMU walks the first level table, not the software directory */
+    MiArmSyncL1(PointerPde);
 #endif
 }
 
@@ -1135,6 +1154,9 @@ MI_WRITE_INVALID_PDE(IN PMMPDE PointerPde,
     ASSERT(InvalidPde.u.Soft.Protection == MM_EXECUTE_READWRITE);
 #endif
     *PointerPde = InvalidPde;
+#ifdef _M_ARM
+    MiArmSyncL1(PointerPde);
+#endif
 }
 
 //

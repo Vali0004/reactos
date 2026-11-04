@@ -230,8 +230,14 @@ MmTrimUserMemory(ULONG Target, ULONG Priority, PULONG NrFreedPages)
                 if (MmIsAddressValid(Address))
                 {
                     PMMPTE Pte = MiAddressToPte(Address);
+#ifdef _M_ARM
+                    /* No hardware access tracking, count the page as used */
+                    UNREFERENCED_PARAMETER(Pte);
+                    Accessed = TRUE;
+#else
                     Accessed = Accessed || Pte->u.Hard.Accessed;
                     Pte->u.Hard.Accessed = 0;
+#endif
 
                     /* There is no need to invalidate, the balancer thread is never on a user process */
                     //KeInvalidateTlbEntry(Address);

@@ -805,7 +805,7 @@ MmGetPageProtect(PEPROCESS Process, PVOID Address)
     }
     else
     {
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
         if (MI_IS_PAGE_COPY_ON_WRITE(PointerPte))
             Protect = PAGE_WRITECOPY;
         else if (MI_IS_PAGE_WRITEABLE(PointerPte))
@@ -814,10 +814,18 @@ MmGetPageProtect(PEPROCESS Process, PVOID Address)
             Protect = PAGE_READONLY;
         if (MI_IS_PAGE_EXECUTABLE(PointerPte))
             Protect <<= 4;
+#ifdef _M_ARM
+        /* TEX C B, 000 0 1 is device and 001 0 0 normal non cacheable */
+        if (!PointerPte->u.Hard.Cached && !PointerPte->u.Hard.CacheAttributes)
+            Protect |= PAGE_NOCACHE;
+        else if (!PointerPte->u.Hard.Cached && !PointerPte->u.Hard.Buffered)
+            Protect |= PAGE_WRITECOMBINE;
+#else
         if (PointerPte->u.Hard.CacheType == MI_CACHE_TYPE_DEVICE)
             Protect |= PAGE_NOCACHE;
         else if (PointerPte->u.Hard.CacheType == MI_CACHE_TYPE_WRITE_COMBINED)
             Protect |= PAGE_WRITECOMBINE;
+#endif
 #else
         if (PointerPte->u.Flush.CopyOnWrite)
             Protect = PAGE_WRITECOPY;
@@ -882,7 +890,9 @@ MmSetPageProtect(PEPROCESS Process, PVOID Address, ULONG flProtect)
         TempPte.u.Hard.Valid = 1;
 
     /* Keep dirty & accessed bits */
+#ifndef _M_ARM
     TempPte.u.Hard.Accessed = PointerPte->u.Hard.Accessed;
+#endif
     if (MI_IS_PAGE_DIRTY(PointerPte))
         MI_MAKE_DIRTY_PAGE(&TempPte);
 

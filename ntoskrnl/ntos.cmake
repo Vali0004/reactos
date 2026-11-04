@@ -394,8 +394,9 @@ elseif(ARCH STREQUAL "arm")
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/thrdini.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/trapc.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ke/arm/usercall.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/mm/arm/page.c
-        ${REACTOS_SOURCE_DIR}/ntoskrnl/mm/ARM3/arm/init.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/mm/arm/l1.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/mm/ARM3/i386/init.c
+        ${REACTOS_SOURCE_DIR}/ntoskrnl/mm/i386/page.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/ps/arm/psctx.c
         ${REACTOS_SOURCE_DIR}/ntoskrnl/rtl/arm/rtlexcpt.c)
 elseif(ARCH STREQUAL "arm64")

@@ -171,7 +171,8 @@ typedef ULONG_PTR SWAPENTRY;
 //
 // Wait entry for marking pages that are being serviced
 //
-#ifdef _M_IX86
+#if defined(_M_IX86) || defined(_M_ARM)
+/* on ARM bits 0 and 1 stay clear, the entry still faults */
 #define MM_WAIT_ENTRY            0x7ffffc00
 #elif defined(_M_AMD64) || defined(_M_ARM64)
 #define MM_WAIT_ENTRY            0x7FFFFFFFFFFFFC00ULL

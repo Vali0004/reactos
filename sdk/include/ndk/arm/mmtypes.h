@@ -213,14 +213,11 @@ typedef union _MMPDE_HARDWARE
     ULONG PageFrameNumber:22;
 } MMPDE_HARDWARE, *PMMPDE_HARDWARE;
 
-typedef struct _MMPDE
-{
-    union
-    {
-        MMPDE_HARDWARE Hard;
-        ULONG Long;
-    } u;
-} MMPDE, *PMMPDE;
+/*
+ * Page directory entries are small page PTEs that map the page table pages,
+ * as on x86. MMPDE_HARDWARE describes the first level table the MMU walks.
+ */
+typedef MMPTE MMPDE, *PMMPDE;
 
 #ifdef __cplusplus
 }; // extern "C"
