@@ -204,7 +204,8 @@ $if (_NTDDK_)
 
 #define PAUSE_PROCESSOR __yield();
 
-#define KERNEL_STACK_SIZE         0x3000
+/* 12k overflows on debug builds in the paging path, 20k as on amd64 minus a page */
+#define KERNEL_STACK_SIZE         0x5000
 #define KERNEL_LARGE_STACK_SIZE   0xF000
 #define KERNEL_LARGE_STACK_COMMIT KERNEL_STACK_SIZE
 
