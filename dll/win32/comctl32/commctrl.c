@@ -108,6 +108,8 @@ static const WCHAR strCC32SubclassInfo[] = {
 #define ARCH L"amd64"
 #elif defined __aarch64__
 #define ARCH L"arm64"
+#elif defined __arm__
+#define ARCH L"arm"
 #else
 #define ARCH L"none"
 #endif
