@@ -162,6 +162,12 @@ endif()
 
 set_entrypoint(uefildr EfiEntry)
 
+# edk2 refuses armnt efi applications, this runs after the armforwarders fixup
+if(USE_CLANG_CL AND ARCH STREQUAL "arm")
+    add_custom_command(TARGET uefildr POST_BUILD
+        COMMAND native-pefixup --efiarm $<TARGET_FILE:uefildr>)
+endif()
+
 target_link_libraries(uefildr uefifreeldr_common cportlib blcmlib blrtl libcntpr)
 if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
     target_link_libraries(uefildr fdtlib)

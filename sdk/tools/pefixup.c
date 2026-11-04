@@ -32,7 +32,8 @@ enum fixup_mode
     MODE_WDMDRIVER,
     MODE_KERNELDLL,
     MODE_KERNEL,
-    MODE_ARMFORWARDERS
+    MODE_ARMFORWARDERS,
+    MODE_EFIARM
 };
 
 void *rva_to_ptr(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header, DWORD rva)
@@ -460,6 +461,21 @@ static int fix_arm_forwarders(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header
     return fix_arm_local_imports(buffer, nt_header, exports, functions, dir);
 }
 
+/*
+ * lld marks 32-bit arm images as armnt, edk2 only loads armthumb_mixed
+ * efi applications, the code is the same thumb-2 either way
+ */
+#ifndef IMAGE_FILE_MACHINE_THUMB_MIXED
+#define IMAGE_FILE_MACHINE_THUMB_MIXED 0x1c2
+#endif
+
+static int fix_efi_arm(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
+{
+    if (nt_header->FileHeader.Machine == IMAGE_FILE_MACHINE_ARMNT)
+        nt_header->FileHeader.Machine = IMAGE_FILE_MACHINE_THUMB_MIXED;
+    return 0;
+}
+
 static
 void
 print_usage(void)
@@ -472,6 +488,7 @@ print_usage(void)
            "  --kerneldll           Fix code, data and resource sections for Kernel-Mode DLLs;\n"
            "  --kernel              Fix code, data and resource sections for kernels;\n"
            "  --armforwarders       Fix the thumb bits lld gets wrong on export rvas and local imports;\n"
+           "  --efiarm              Mark a 32-bit arm efi application as armthumb_mixed for edk2;\n"
            "\n"
            "and/or a combination of the following ones:\n"
            "  --section:name[=newname][,[[!]{CDEIKOMPRSUW}][A{1248PTSX}]]\n"
@@ -537,6 +554,12 @@ int main(int argc, char **argv)
             if (mode != MODE_NONE)
                 goto mode_error;
             mode = MODE_ARMFORWARDERS;
+        }
+        else if (strcmp(&argv[i][2], "efiarm") == 0)
+        {
+            if (mode != MODE_NONE)
+                goto mode_error;
+            mode = MODE_EFIARM;
         }
         else if (strncmp(&argv[i][2], "section:", 8) == 0)
         {
@@ -617,6 +640,8 @@ int main(int argc, char **argv)
             result = add_loadconfig(buffer, nt_header);
         else if (mode == MODE_ARMFORWARDERS)
             result = fix_arm_forwarders(buffer, nt_header);
+        else if (mode == MODE_EFIARM)
+            result = fix_efi_arm(buffer, nt_header);
         else
             result = driver_fixup(mode, buffer, nt_header);
     }
