@@ -621,7 +621,15 @@ endfunction()
 # disable RTTI unless said so
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_RTTI>>,/GR,/GR->>")
 # disable exceptions unless said so
-add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_EXCEPTIONS>>,/EHsc,/EHs-c->>")
+if(USE_CLANG_CL AND ARCH STREQUAL "arm")
+    # LLVM cannot emit C++ exception handling for 32-bit ARM Windows
+    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/EHs-c->"
+                        "$<$<COMPILE_LANGUAGE:CXX>:/D_HAS_EXCEPTIONS=0>"
+                        "$<$<COMPILE_LANGUAGE:CXX>:/D_STLP_NO_EXCEPTIONS>"
+                        "$<$<COMPILE_LANGUAGE:CXX>:/D_ATL_NO_EXCEPTIONS>")
+else()
+    add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_EXCEPTIONS>>,/EHsc,/EHs-c->>")
+endif()
 
 # Create our interface libraries wrapping the needed library for this compiler
 add_library(cppstl INTERFACE)

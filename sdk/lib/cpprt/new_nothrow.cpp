@@ -14,6 +14,7 @@ const std::nothrow_t std::nothrow;
 
 void* operator new (std::size_t size, const std::nothrow_t& nothrow_constant) throw()
 {
+#ifdef _CPPUNWIND
     try
     {
         return operator new (size);
@@ -22,10 +23,15 @@ void* operator new (std::size_t size, const std::nothrow_t& nothrow_constant) th
     {
         return NULL;
     }
+#else
+    /* without C++ exceptions the throwing new already returns NULL */
+    return operator new (size);
+#endif
 }
 
 void* operator new[] (std::size_t size, const std::nothrow_t& nothrow_constant) throw()
 {
+#ifdef _CPPUNWIND
     try
     {
         return operator new[] (size);
@@ -34,4 +40,8 @@ void* operator new[] (std::size_t size, const std::nothrow_t& nothrow_constant) 
     {
         return NULL;
     }
+#else
+    /* without C++ exceptions the throwing new already returns NULL */
+    return operator new[] (size);
+#endif
 }

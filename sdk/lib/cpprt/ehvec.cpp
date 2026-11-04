@@ -14,6 +14,7 @@ void __stdcall MSVCRTEX_eh_vector_constructor_iterator(void *pMem, size_t sizeOf
          pItem < pEnd;
          pItem += sizeOfItem)
     {
+#ifdef _CPPUNWIND
         try
         {
             ctor(pItem);
@@ -24,6 +25,10 @@ void __stdcall MSVCRTEX_eh_vector_constructor_iterator(void *pMem, size_t sizeOf
                 dtor(pItem);
             throw;
         }
+#else
+        /* no C++ exceptions, nothing can unwind out of the constructor */
+        ctor(pItem);
+#endif
     }
 }
 
@@ -34,6 +39,7 @@ void __stdcall MSVCRTEX_eh_vector_destructor_iterator(void *pMem, size_t sizeOfI
          pItem >= pMem;
          pItem -= sizeOfItem)
     {
+#ifdef _CPPUNWIND
         try
         {
             dtor(pItem);
@@ -44,5 +50,8 @@ void __stdcall MSVCRTEX_eh_vector_destructor_iterator(void *pMem, size_t sizeOfI
                 dtor(pItem);
             throw;
         }
+#else
+        dtor(pItem);
+#endif
     }
 }

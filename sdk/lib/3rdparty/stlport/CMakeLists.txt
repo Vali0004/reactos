@@ -48,7 +48,7 @@ endif()
 
 target_include_directories(stlport PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/c++/stlport)
 target_compile_definitions(stlport PRIVATE
-    _STLP_USE_EXCEPTIONS _DLL __USE_CRTIMP
+    $<$<NOT:$<AND:$<BOOL:${USE_CLANG_CL}>,$<STREQUAL:${ARCH},arm>>>:_STLP_USE_EXCEPTIONS> _DLL __USE_CRTIMP
     _BUILD_STLPORT NATIVE_CPP_INCLUDE=${REACTOS_SOURCE_DIR}/sdk/include/c++)
 
 target_compile_definitions(stlport PUBLIC
