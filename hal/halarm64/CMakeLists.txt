@@ -12,6 +12,7 @@ spec2def(hal.dll ../hal.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
     generic/acpi.c
+    generic/dtb.c
     generic/gic.c
     generic/halinit.c
     generic/halpnp.c
@@ -35,7 +36,7 @@ add_library(hal MODULE
     halarm64.rc
     ${CMAKE_CURRENT_BINARY_DIR}/hal.def)
 
-target_link_libraries(hal libcntpr ${PSEH_LIB})
+target_link_libraries(hal libcntpr fdtlib ${PSEH_LIB})
 add_importlibs(hal ntoskrnl)
 add_dependencies(hal psdk asm)
 set_module_type(hal kerneldll ENTRYPOINT HalInitSystem 8)
