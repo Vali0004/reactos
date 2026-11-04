@@ -23,7 +23,17 @@ RtlGetCallersAddress(
     _Out_ PVOID *CallersAddress,
     _Out_ PVOID *CallersCaller)
 {
-    ASSERT(FALSE);
+    PULONG_PTR Frame;
+
+    /* r11 frame records are {previous r11, lr}, ours leads to the routine that asked */
+    Frame = (PULONG_PTR)__builtin_frame_address(0);
+    Frame = Frame ? (PULONG_PTR)Frame[0] : NULL;
+    *CallersAddress = Frame ? (PVOID)Frame[1] : NULL;
+    if (CallersCaller)
+    {
+        Frame = Frame ? (PULONG_PTR)Frame[0] : NULL;
+        *CallersCaller = Frame ? (PVOID)Frame[1] : NULL;
+    }
 }
 
 /*

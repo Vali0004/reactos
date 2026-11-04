@@ -993,7 +993,11 @@ MI_MAKE_SUBSECTION_PTE(IN PMMPTE NewPte,
      * maximum of 128MB to each delta, meaning nonpaged pool cannot exceed
      * 256MB.
      */
+#ifdef _M_ARM
+    if ((ULONG_PTR)Segment < ((ULONG_PTR)MmSubsectionBase + (64 * _1MB)))
+#else
     if ((ULONG_PTR)Segment < ((ULONG_PTR)MmSubsectionBase + (128 * _1MB)))
+#endif
     {
         Offset = (ULONG_PTR)Segment - (ULONG_PTR)MmSubsectionBase;
         NewPte->u.Subsect.WhichPool = PagedPool;
@@ -1008,8 +1012,15 @@ MI_MAKE_SUBSECTION_PTE(IN PMMPTE NewPte,
      * 4 bits go in the "low" (but we assume the bottom 3 are zero)
      * and the other 20 bits go in the "high"
      */
+#ifdef _M_ARM
+    /* ARM keeps 3 low bits, two are taken by the descriptor type, so 64MB a side */
+    ASSERT(Offset < (64 * _1MB));
+    NewPte->u.Subsect.SubsectionAddressLow = (Offset & 0x38) >> 3;
+    NewPte->u.Subsect.SubsectionAddressHigh = (Offset & 0x3FFFFC0) >> 6;
+#else
     NewPte->u.Subsect.SubsectionAddressLow = (Offset & 0x78) >> 3;
     NewPte->u.Subsect.SubsectionAddressHigh = (Offset & 0xFFFFF80) >> 7;
+#endif
 }
 
 FORCEINLINE

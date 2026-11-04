@@ -90,6 +90,9 @@ KiExceptionExit(
 //
 #define KeGetTrapFrameInterruptState(TrapFrame) 0
 
+/* a trap frame from user mode, System mode shares its registers */
+#define KiUserTrap(TrapFrame) (((TrapFrame)->Cpsr & CPSRM_MASK) == CPSRM_USER)
+
 FORCEINLINE
 BOOLEAN
 KeDisableInterrupts(VOID)

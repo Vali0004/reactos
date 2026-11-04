@@ -114,6 +114,11 @@ _SEH3$_Unregister(
         while (CurrentFrame->Next != Frame)
         {
             CurrentFrame = CurrentFrame->Next;
+
+            /* the auto cleanup after an __except block unregisters a frame
+               the handler already took off, it is not in the chain anymore */
+            if ((CurrentFrame == (PVOID)-1) || (CurrentFrame == NULL))
+                return;
         }
 
         /* Remove the frame from the linked list */

@@ -23,11 +23,6 @@
     b LdrpInit
     LEAF_END LdrInitializeThunk
 
-    LEAF_ENTRY KiRaiseUserExceptionDispatcher
-    __assertfail
-    bx lr
-    LEAF_END KiRaiseUserExceptionDispatcher
-
 //
 // the kernel leaves the interrupted CONTEXT at sp, the normal routine in r3
 // and its three arguments in r0-r2
@@ -45,15 +40,5 @@
     bl RtlRaiseStatus
     __assertfail
     LEAF_END KiUserApcDispatcher
-
-    LEAF_ENTRY KiUserCallbackDispatcher
-    __assertfail
-    bx lr
-    LEAF_END KiUserCallbackDispatcher
-
-    LEAF_ENTRY KiUserExceptionDispatcher
-    __assertfail
-    bx lr
-    LEAF_END KiUserExceptionDispatcher
 
     END

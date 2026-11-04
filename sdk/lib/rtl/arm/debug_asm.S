@@ -66,7 +66,9 @@
     str     sp, [r0, #CxSp]
     str     lr, [r0, #CxLr]
     str     lr, [r0, #CxPc]
-    mrs     r1, apsr
+    /* the mode comes along, the T bit reads as 0 but all callers are Thumb */
+    mrs     r1, cpsr
+    orr     r1, r1, #0x20
     str     r1, [r0, #CxCpsr]
     vmrs    r1, fpscr
     str     r1, [r0, #CxFpscr]

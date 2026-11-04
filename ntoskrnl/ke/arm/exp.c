@@ -154,6 +154,43 @@ KeTrapFrameToContext(IN PKTRAP_FRAME TrapFrame,
     if (OldIrql < APC_LEVEL) KeLowerIrql(OldIrql);
 }
 
+/* KiUserExceptionDispatcher(ExceptionRecord, Context) finds both on the user stack */
+static
+BOOLEAN
+KiDispatchExceptionToUser(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ PCONTEXT Context,
+    _In_ PEXCEPTION_RECORD ExceptionRecord)
+{
+    PCONTEXT UserContext;
+    PEXCEPTION_RECORD UserRecord;
+    ULONG_PTR UserSp;
+
+    UserSp = (Context->Sp - sizeof(CONTEXT) - sizeof(EXCEPTION_RECORD)) & ~(ULONG_PTR)7;
+    UserContext = (PCONTEXT)UserSp;
+    UserRecord = (PEXCEPTION_RECORD)(UserSp + sizeof(CONTEXT));
+
+    _SEH2_TRY
+    {
+        ProbeForWrite((PVOID)UserSp, sizeof(CONTEXT) + sizeof(EXCEPTION_RECORD), sizeof(QUAD));
+        *UserContext = *Context;
+        *UserRecord = *ExceptionRecord;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return FALSE);
+    }
+    _SEH2_END;
+
+    TrapFrame->R0 = (ULONG)UserRecord;
+    TrapFrame->R1 = (ULONG)UserContext;
+    TrapFrame->Sp = UserSp;
+    TrapFrame->Lr = 0;
+    TrapFrame->Pc = (ULONG)KeUserExceptionDispatcher & ~1;
+    TrapFrame->Cpsr = CPSRM_USER | CPSRC_THUMB;
+    return TRUE;
+}
+
 VOID
 NTAPI
 KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
@@ -241,7 +278,29 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
     }
     else
     {
-        /* FIXME: TODO */
+        /* debug prints and other debug services from user mode go to the debugger first */
+        if ((FirstChance != FALSE) &&
+            KiDebugRoutine(TrapFrame, ExceptionFrame, ExceptionRecord, &Context, PreviousMode, FALSE))
+        {
+            goto Handled;
+        }
+
+        /* a user debugger, then the process' own handlers */
+        if (FirstChance != FALSE)
+        {
+            if (DbgkForwardException(ExceptionRecord, TRUE, FALSE))
+                return;
+
+            if (KiDispatchExceptionToUser(TrapFrame, &Context, ExceptionRecord))
+                return;
+        }
+
+        /* second chance for the user debugger and the subsystem */
+        if (DbgkForwardException(ExceptionRecord, TRUE, TRUE))
+            return;
+        if (DbgkForwardException(ExceptionRecord, FALSE, TRUE))
+            return;
+
         /* 3rd strike, kill the process */
         DPRINT1("Kill %.16s, ExceptionCode: %lx, ExceptionAddress: %lx\n",
                 PsGetCurrentProcess()->ImageFileName,
@@ -271,6 +330,26 @@ NTAPI
 KeRaiseUserException(
     _In_ NTSTATUS ExceptionCode)
 {
-    ASSERT(FALSE);
-    return STATUS_NOT_IMPLEMENTED;
+    PKTHREAD Thread = KeGetCurrentThread();
+    PKTRAP_FRAME TrapFrame = Thread->TrapFrame;
+    PTEB Teb = Thread->Teb;
+
+    if (!TrapFrame || !KiUserTrap(TrapFrame))
+        return ExceptionCode;
+
+    _SEH2_TRY
+    {
+        Teb->ExceptionCode = ExceptionCode;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return ExceptionCode);
+    }
+    _SEH2_END;
+
+    /* the dispatcher returns to the code that made the system call */
+    TrapFrame->Lr = TrapFrame->Pc | 1;
+    TrapFrame->Pc = (ULONG)KeRaiseUserExceptionDispatcher & ~1;
+    TrapFrame->Cpsr |= CPSRC_THUMB;
+    return ExceptionCode;
 }

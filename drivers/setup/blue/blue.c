@@ -16,6 +16,42 @@
 #define NDEBUG
 #include <debug.h>
 
+/* ARM has no VGA, the text screen is kept in memory until something draws it */
+#if defined(_M_ARM)
+#define BLUE_NO_VGA
+#endif
+
+static PUCHAR
+ScrMapVideoMemory(
+    _In_ PHYSICAL_ADDRESS BaseAddress,
+    _In_ SIZE_T Size)
+{
+#ifdef BLUE_NO_VGA
+    PUCHAR Buffer;
+
+    UNREFERENCED_PARAMETER(BaseAddress);
+    Buffer = ExAllocatePoolWithTag(NonPagedPool, Size, TAG_BLUE);
+    if (Buffer)
+        RtlZeroMemory(Buffer, Size);
+    return Buffer;
+#else
+    return (PUCHAR)MmMapIoSpace(BaseAddress, Size, MmNonCached);
+#endif
+}
+
+static VOID
+ScrUnmapVideoMemory(
+    _In_ PUCHAR VideoMemory,
+    _In_ SIZE_T Size)
+{
+#ifdef BLUE_NO_VGA
+    UNREFERENCED_PARAMETER(Size);
+    ExFreePoolWithTag(VideoMemory, TAG_BLUE);
+#else
+    MmUnmapIoSpace(VideoMemory, Size);
+#endif
+}
+
 /* NOTES ******************************************************************/
 /*
  *  [[character][attribute]][[character][attribute]]....
@@ -303,10 +339,93 @@ ScrInbvCleanup(VOID)
 
 /* FUNCTIONS **************************************************************/
 
+#ifdef BLUE_NO_VGA
+/*
+ * The text screen is drawn on the boot framebuffer through bootvid, 8x8 font
+ * cells doubled to 8x16 so 80x25 fills 640x400 of its 640x480 screen.
+ */
+VOID NTAPI VidBufferToScreenBlt(PUCHAR Buffer, ULONG Left, ULONG Top, ULONG Width, ULONG Height, ULONG Stride);
+
+#define FB_CELL_WIDTH   8
+#define FB_CELL_HEIGHT  16
+#define FB_TOP          40
+#define FB_MAX_COLUMNS  80
+#define FB_MAX_ROWS     25
+
+/* VGA attributes are blue in bit 0, the bootvid palette is red in bit 0 */
+static const UCHAR FbVgaToBootvid[16] = { 0, 4, 2, 6, 1, 5, 3, 8, 7, 12, 10, 14, 9, 13, 11, 15 };
+
+static UCHAR FbShadow[FB_MAX_COLUMNS * FB_MAX_ROWS * 2];
+static UCHAR FbRow[FB_CELL_HEIGHT][FB_MAX_COLUMNS * FB_CELL_WIDTH / 2];
+static BOOLEAN FbShadowValid = FALSE;
+
+static VOID
+ScrFbRefresh(
+    _In_ PDEVICE_EXTENSION DeviceExtension)
+{
+    ULONG Columns, Rows, Row, Column, Line, Pixel, RowBytes;
+    PUCHAR Cells, Glyph, Out;
+    UCHAR Fore, Back, Bits, Left, Right;
+
+    if (!DeviceExtension->Enabled || !DeviceExtension->VideoMemory || !DeviceExtension->FontBitfield)
+        return;
+
+    Columns = min(DeviceExtension->Columns, FB_MAX_COLUMNS);
+    Rows = min(DeviceExtension->Rows, FB_MAX_ROWS);
+    RowBytes = DeviceExtension->Columns * 2;
+
+    for (Row = 0; Row < Rows; Row++)
+    {
+        Cells = DeviceExtension->VideoMemory + Row * RowBytes;
+
+        /* only rows that changed since the last refresh are drawn again */
+        if (FbShadowValid && RtlEqualMemory(&FbShadow[Row * FB_MAX_COLUMNS * 2], Cells, Columns * 2))
+            continue;
+        RtlCopyMemory(&FbShadow[Row * FB_MAX_COLUMNS * 2], Cells, Columns * 2);
+
+        for (Column = 0; Column < Columns; Column++)
+        {
+            Glyph = DeviceExtension->FontBitfield + Cells[Column * 2] * 8;
+            Fore = FbVgaToBootvid[Cells[Column * 2 + 1] & 0x0F];
+            Back = FbVgaToBootvid[Cells[Column * 2 + 1] >> 4];
+
+            for (Line = 0; Line < FB_CELL_HEIGHT; Line++)
+            {
+                Bits = Glyph[Line / 2];
+                Out = &FbRow[Line][Column * FB_CELL_WIDTH / 2];
+
+                /* two pixels a byte, the left one in the high nibble */
+                for (Pixel = 0; Pixel < FB_CELL_WIDTH; Pixel += 2)
+                {
+                    Left = (Bits & (0x80 >> Pixel)) ? Fore : Back;
+                    Right = (Bits & (0x40 >> Pixel)) ? Fore : Back;
+                    *Out++ = (UCHAR)((Left << 4) | Right);
+                }
+            }
+        }
+
+        VidBufferToScreenBlt(&FbRow[0][0],
+                             0,
+                             FB_TOP + Row * FB_CELL_HEIGHT,
+                             Columns * FB_CELL_WIDTH,
+                             FB_CELL_HEIGHT,
+                             sizeof(FbRow[0]));
+    }
+
+    FbShadowValid = TRUE;
+}
+#else
+#define ScrFbRefresh(DeviceExtension)
+#endif
+
 static VOID
 FASTCALL
 ScrSetRegisters(const VGA_REGISTERS *Registers)
 {
+#ifdef BLUE_NO_VGA
+    UNREFERENCED_PARAMETER(Registers);
+    return;
+#endif
     UINT32 i;
 
     /* Update misc output register */
@@ -366,6 +485,9 @@ ScrSetCursor(
 
     if (!DeviceExtension->VideoMemory)
         return;
+#ifdef BLUE_NO_VGA
+    return;
+#endif
 
     Offset = (DeviceExtension->CursorY * DeviceExtension->Columns) + DeviceExtension->CursorX;
 
@@ -397,6 +519,9 @@ ScrSetCursorShape(
 
     data |= (UCHAR)(height - size);
 
+#ifdef BLUE_NO_VGA
+    return;
+#endif
     _disable();
     WRITE_PORT_UCHAR(CRTC_COMMAND, CRTC_CURSORSTART);
     WRITE_PORT_UCHAR(CRTC_DATA, data);
@@ -414,6 +539,20 @@ ScrAcquireOwnership(
     UCHAR data, value;
     ULONG offset;
     ULONG Index;
+
+#ifdef BLUE_NO_VGA
+    /* no VGA to program or read back, keep a fixed 80x25 text screen */
+    UNREFERENCED_PARAMETER(data);
+    UNREFERENCED_PARAMETER(value);
+    UNREFERENCED_PARAMETER(offset);
+    UNREFERENCED_PARAMETER(Index);
+    DeviceExtension->Columns = 80;
+    DeviceExtension->Rows = 25;
+    DeviceExtension->ScanLines = 16;
+    DeviceExtension->CursorX = 0;
+    DeviceExtension->CursorY = 0;
+    return;
+#endif
 
     _disable();
 
@@ -538,7 +677,7 @@ ScrResetScreen(
             if (DeviceExtension->VideoMemory)
             {
                 ASSERT(DeviceExtension->VideoMemorySize != 0);
-                MmUnmapIoSpace(DeviceExtension->VideoMemory, DeviceExtension->VideoMemorySize);
+                ScrUnmapVideoMemory(DeviceExtension->VideoMemory, DeviceExtension->VideoMemorySize);
             }
             DeviceExtension->VideoMemory = NULL;
             DeviceExtension->VideoMemorySize = 0;
@@ -559,8 +698,7 @@ ScrResetScreen(
 
             /* Map the video memory */
             BaseAddress.QuadPart = VIDMEM_BASE;
-            DeviceExtension->VideoMemory =
-                (PUCHAR)MmMapIoSpace(BaseAddress, DeviceExtension->VideoMemorySize, MmNonCached);
+            DeviceExtension->VideoMemory = ScrMapVideoMemory(BaseAddress, DeviceExtension->VideoMemorySize);
             if (!DeviceExtension->VideoMemory)
             {
                 DeviceExtension->VideoMemorySize = 0;
@@ -621,7 +759,7 @@ ScrResetScreen(
             if (DeviceExtension->VideoMemory)
             {
                 ASSERT(DeviceExtension->VideoMemorySize != 0);
-                MmUnmapIoSpace(DeviceExtension->VideoMemory, DeviceExtension->VideoMemorySize);
+                ScrUnmapVideoMemory(DeviceExtension->VideoMemory, DeviceExtension->VideoMemorySize);
             }
             DeviceExtension->VideoMemory = NULL;
             DeviceExtension->VideoMemorySize = 0;
@@ -835,6 +973,7 @@ ScrWrite(
     ScrSetCursor(DeviceExtension);
 
     Status = STATUS_SUCCESS;
+    ScrFbRefresh(DeviceExtension);
 
     Irp->IoStatus.Status = Status;
     IoCompleteRequest(Irp, IO_VIDEO_INCREMENT);
@@ -1520,6 +1659,9 @@ ScrIoControl(
                 break;
             }
             RtlCopyMemory(DeviceExtension->FontBitfield, Irp->AssociatedIrp.SystemBuffer, 256 * 8);
+#ifdef BLUE_NO_VGA
+            FbShadowValid = FALSE;
+#endif
 
             /* Set the font if needed */
             if (DeviceExtension->Enabled && DeviceExtension->VideoMemory)
@@ -1533,6 +1675,8 @@ ScrIoControl(
         default:
             Status = STATUS_NOT_IMPLEMENTED;
     }
+
+    ScrFbRefresh(DeviceExtension);
 
     Irp->IoStatus.Status = Status;
     IoCompleteRequest(Irp, IO_VIDEO_INCREMENT);

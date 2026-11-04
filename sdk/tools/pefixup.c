@@ -356,6 +356,70 @@ static int change_section_attribs(char* section_attribs, unsigned char* buffer, 
     return 0;
 }
 
+static int compare_dwords(const void *a, const void *b)
+{
+    DWORD x = *(const DWORD *)a, y = *(const DWORD *)b;
+    return (x > y) - (x < y);
+}
+
+/*
+ * lld 21 writes the __imp_ pointer of a dllimport function defined in the
+ * same image without the thumb bit, a call through it lands in arm state.
+ * relocated words holding an exported thumb function minus one get it back.
+ */
+static int fix_arm_local_imports(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header,
+                                 PIMAGE_EXPORT_DIRECTORY exports, DWORD *functions,
+                                 PIMAGE_DATA_DIRECTORY export_dir)
+{
+    PIMAGE_DATA_DIRECTORY dir;
+    PIMAGE_BASE_RELOCATION block;
+    DWORD *targets, count = 0, i, offset, *slot, key;
+    USHORT *entry;
+    unsigned char *end;
+
+    targets = malloc((exports->NumberOfFunctions + 1) * sizeof(DWORD));
+    if (!targets)
+        return 1;
+
+    /* every thumb export that is code, not a forwarder string */
+    for (i = 0; i < exports->NumberOfFunctions; i++)
+    {
+        DWORD rva = functions[i];
+        if (!(rva & 1))
+            continue;
+        if ((rva >= export_dir->VirtualAddress) && (rva < export_dir->VirtualAddress + export_dir->Size))
+            continue;
+        targets[count++] = (DWORD)nt_header->OptionalHeader.ImageBase + rva - 1;
+    }
+    qsort(targets, count, sizeof(DWORD), compare_dwords);
+
+    dir = &nt_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+    block = dir->VirtualAddress ? rva_to_ptr(buffer, nt_header, dir->VirtualAddress) : NULL;
+    end = block ? (unsigned char *)block + dir->Size : NULL;
+
+    while (block && ((unsigned char *)block < end) && (block->SizeOfBlock >= sizeof(*block)))
+    {
+        entry = (USHORT *)(block + 1);
+        for (i = 0; i < (block->SizeOfBlock - sizeof(*block)) / sizeof(USHORT); i++, entry++)
+        {
+            /* type 3 is a plain 32 bit address */
+            if ((*entry >> 12) != 3)
+                continue;
+            offset = *entry & 0xFFF;
+            slot = rva_to_ptr(buffer, nt_header, block->VirtualAddress + offset);
+            if (!slot)
+                continue;
+            key = *slot;
+            if (bsearch(&key, targets, count, sizeof(DWORD), compare_dwords))
+                *slot = key | 1;
+        }
+        block = (PIMAGE_BASE_RELOCATION)((unsigned char *)block + block->SizeOfBlock);
+    }
+
+    free(targets);
+    return 0;
+}
+
 /*
  * lld 21 sets the thumb bit on every arm export rva, forwarder strings too.
  * a string has a NUL before it, a non-NUL byte there means the bit is bogus.
@@ -393,7 +457,7 @@ static int fix_arm_forwarders(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header
             functions[i] = rva & ~1;
     }
 
-    return 0;
+    return fix_arm_local_imports(buffer, nt_header, exports, functions, dir);
 }
 
 static
@@ -407,7 +471,7 @@ print_usage(void)
            "  --wdmdriver           Fix code, data and resource sections for WDM drivers;\n"
            "  --kerneldll           Fix code, data and resource sections for Kernel-Mode DLLs;\n"
            "  --kernel              Fix code, data and resource sections for kernels;\n"
-           "  --armforwarders       Fix the forwarder rvas lld marks as thumb code;\n"
+           "  --armforwarders       Fix the thumb bits lld gets wrong on export rvas and local imports;\n"
            "\n"
            "and/or a combination of the following ones:\n"
            "  --section:name[=newname][,[[!]{CDEIKOMPRSUW}][A{1248PTSX}]]\n"

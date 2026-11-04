@@ -295,7 +295,16 @@ VidInitialize(
 
     /* Reset the video mode if requested */
     if (SetMode)
+    {
         VidResetDisplay(TRUE);
+    }
+    else
+    {
+        /* keep what is on screen, but drawing needs a clean backbuffer and real colors */
+        RtlZeroMemory(BackBuffer, BackBufferSize);
+        for (ULONG i = 0; i < BV_MAX_COLORS; i++)
+            CachedPalette[i] = VidpDefaultPalette[i] | 0xFF000000;
+    }
 
     return TRUE;
 

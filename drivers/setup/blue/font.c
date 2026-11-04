@@ -28,6 +28,12 @@ ScrSetFont(
     PHYSICAL_ADDRESS BaseAddress;
     PUCHAR Bitplane;
 
+#if defined(_M_ARM)
+    /* no VGA bit planes to load a font into */
+    UNREFERENCED_PARAMETER(FontBitfield);
+    return;
+#endif
+
     /* open bit plane for font table access */
     OpenBitPlane();
 

@@ -113,11 +113,12 @@ C_ASSERT(sizeof(HARDWARE_PDE_ARMV6) == sizeof(ULONG));
 C_ASSERT(sizeof(HARDWARE_LARGE_PTE_ARMV6) == sizeof(ULONG));
 C_ASSERT(sizeof(HARDWARE_PTE_ARMV6) == sizeof(ULONG));
 
+/* bits 0-1 stay clear so the MMU faults, Protection holds the full 5 bit MM_ mask like x86 */
 typedef struct _MMPTE_SOFTWARE
 {
     ULONG Valid:2;
-    ULONG PageFileLow:4;
-    ULONG Protection:4;
+    ULONG PageFileLow:3;
+    ULONG Protection:5;
     ULONG Prototype:1;
     ULONG Transition:1;
     ULONG PageFileHigh:20;
@@ -129,8 +130,7 @@ typedef struct _MMPTE_TRANSITION
     ULONG Buffered:1;
     ULONG Cached:1;
     ULONG Owner:1;
-    ULONG Protection:4;
-    ULONG ReadOnly:1;
+    ULONG Protection:5;
     ULONG Prototype:1;
     ULONG Transition:1;
     ULONG PageFrameNumber:20;
@@ -148,8 +148,8 @@ typedef struct _MMPTE_PROTOTYPE
 typedef struct _MMPTE_SUBSECTION
 {
     ULONG Valid:2;
-    ULONG SubsectionAddressLow:4;
-    ULONG Protection:4;
+    ULONG SubsectionAddressLow:3;
+    ULONG Protection:5;
     ULONG Prototype:1;
     ULONG SubsectionAddressHigh:20;
     ULONG WhichPool:1;

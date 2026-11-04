@@ -36,7 +36,6 @@
 
 #define MAX_SYSCALL_ARGUMENTS 16
 
-#define KiUserTrap(TrapFrame) (((TrapFrame)->Cpsr & CPSRM_MASK) == CPSRM_USER)
 
 typedef ULONG_PTR (NTAPI *PKI_SYSTEM_SERVICE)(
     ULONG_PTR, ULONG_PTR, ULONG_PTR, ULONG_PTR,

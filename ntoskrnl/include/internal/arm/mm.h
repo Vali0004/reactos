@@ -71,7 +71,7 @@
 #define MI_MAX_ALLOCATION_FRAGMENT              (2  * _1MB)
 
 /* Misc constants, the software protection sits above the 2 type bits */
-#define MM_PTE_SOFTWARE_PROTECTION_BITS         6
+#define MM_PTE_SOFTWARE_PROTECTION_BITS         5
 #define MI_MIN_SECONDARY_COLORS                 8
 #define MI_SECONDARY_COLORS                     64
 #define MI_MAX_SECONDARY_COLORS                 1024
@@ -211,10 +211,10 @@
 #define MiSubsectionPteToSubsection(x)                              \
     ((x)->u.Subsect.WhichPool == PagedPool) ?                       \
         (PMMPTE)((ULONG_PTR)MmSubsectionBase +                      \
-                 (((x)->u.Subsect.SubsectionAddressHigh << 7) |     \
+                 (((x)->u.Subsect.SubsectionAddressHigh << 6) |     \
                    (x)->u.Subsect.SubsectionAddressLow << 3)) :     \
         (PMMPTE)((ULONG_PTR)MmNonPagedPoolEnd -                     \
-                (((x)->u.Subsect.SubsectionAddressHigh << 7) |      \
+                (((x)->u.Subsect.SubsectionAddressHigh << 6) |      \
                   (x)->u.Subsect.SubsectionAddressLow << 3))
 
 /* mm/arm/procsup.c */
