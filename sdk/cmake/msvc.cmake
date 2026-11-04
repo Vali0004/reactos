@@ -1,4 +1,3 @@
-
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(/Ox /Ob2 /Ot /Oy)
     # Avoid spam in clang-cl as it doesn't support /GT
@@ -93,6 +92,11 @@ endif()
 if(ARCH STREQUAL "arm64" AND MSVC_VERSION GREATER_EQUAL 1944)
     message(STATUS "Forcing interlocked functions to be inlined for ARM64 builds")
     add_compile_options("/forceInterlockedFunctions-")
+endif()
+
+# off Windows there is no armasm64, ARM64 asm goes through the GAS side of kxarm64.h
+if(ARCH STREQUAL "arm64" AND NOT CMAKE_HOST_WIN32)
+    set(MSVC_ARM64_GAS TRUE)
 endif()
 
 # Generate Warnings Level 3
