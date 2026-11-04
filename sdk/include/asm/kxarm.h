@@ -217,7 +217,7 @@ __FuncEndLabel SETS ""
 \Name:
 .endm
 
-.macro PROLOG_END
+.macro PROLOG_END Name
 .endm
 
 .macro NESTED_END Name
