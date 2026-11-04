@@ -47,7 +47,7 @@
 
     bx lr
 
-__rt_srsh2
+LABEL(__rt_srsh2)
 
     /* Check if shift is > 64 */
     cmp r2, 64
@@ -64,7 +64,7 @@ __rt_srsh2
 
     bx lr
 
-__rt_srsh3
+LABEL(__rt_srsh3)
 
     /* r1 = r1 >> 32 (arithmetic shift!) */
     asr r1, r1, #32
