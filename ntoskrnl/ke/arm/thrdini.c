@@ -96,6 +96,7 @@ KiInitializeContextThread(
 
     CtxSwitchFrame->Return = (ULONG)KiThreadStartup;
     CtxSwitchFrame->ApcBypass = TRUE;
+    CtxSwitchFrame->ExceptionList = EXCEPTION_CHAIN_END;
 
     StartFrame->SystemRoutine = (ULONG)SystemRoutine;
     StartFrame->StartRoutine = (ULONG)StartRoutine;
@@ -146,6 +147,10 @@ KiSwapContextResume(
     NewProcess = NewThread->ApcState.Process;
     if (OldProcess != NewProcess)
         KiSwapProcess(NewProcess, OldProcess);
+
+    /* the kernel SEH chain is per thread, the PCR only holds the running one */
+    ((PKSWITCH_FRAME)OldThread->KernelStack)->ExceptionList = Pcr->NtTib.ExceptionList;
+    Pcr->NtTib.ExceptionList = ((PKSWITCH_FRAME)NewThread->KernelStack)->ExceptionList;
 
     CurrentCycleTime = KxQueryProcessorCycleTime();
     ElapsedCycles = CurrentCycleTime - Pcr->Prcb.StartCycles;

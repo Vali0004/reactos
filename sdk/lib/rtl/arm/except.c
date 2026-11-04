@@ -191,6 +191,20 @@ RtlInitializeContext(
     IN PTHREAD_START_ROUTINE ThreadStartAddress,
     IN PVOID StackBase)
 {
+    UNREFERENCED_PARAMETER(ProcessHandle);
+
+    /* the ABI keeps sp 8 byte aligned at public interfaces */
+    if ((ULONG_PTR)StackBase & 0x7)
+        RtlRaiseStatus(STATUS_BAD_INITIAL_STACK);
+
+    RtlZeroMemory(ThreadContext, sizeof(*ThreadContext));
+    ThreadContext->ContextFlags = CONTEXT_FULL;
+
+    /* the start parameter is the first argument, everything here is Thumb */
+    ThreadContext->R0 = (ULONG)ThreadStartParam;
+    ThreadContext->Sp = (ULONG)StackBase;
+    ThreadContext->Pc = (ULONG)ThreadStartAddress & ~1;
+    ThreadContext->Cpsr = 0x10 | 0x20; /* user mode, T */
 }
 
 /* EOF */

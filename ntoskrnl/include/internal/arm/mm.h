@@ -124,7 +124,8 @@
 #define MI_IS_PAGE_WRITEABLE(x)    ((x)->u.Hard.ReadOnly == 0)
 #define MI_IS_PAGE_COPY_ON_WRITE(x) FALSE
 #define MI_IS_PAGE_EXECUTABLE(x)   ((x)->u.Hard.NoExecute == 0)
-#define MI_IS_PAGE_DIRTY(x)        TRUE
+/* a read-only page cannot have been written through, a writable one may have */
+#define MI_IS_PAGE_DIRTY(x)        MI_IS_PAGE_WRITEABLE(x)
 #define MI_MAKE_OWNER_PAGE(x)      ((x)->u.Hard.Owner = 1)
 #define MI_MAKE_WRITE_PAGE(x)      ((x)->u.Hard.ReadOnly = 0)
 

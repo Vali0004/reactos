@@ -105,7 +105,7 @@ KeDisableInterrupts(VOID)
     //
     // Return previous interrupt state
     //
-    return Flags.IrqDisable;
+    return !Flags.IrqDisable;
 }
 
 FORCEINLINE

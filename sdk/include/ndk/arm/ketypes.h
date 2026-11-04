@@ -733,6 +733,8 @@ typedef struct _KSWITCH_FRAME
 {
     KIRQL ApcBypass;
     UCHAR Fill[3];
+    PVOID ExceptionList;
+    ULONG Pad;
     ULONG R4;
     ULONG R5;
     ULONG R6;

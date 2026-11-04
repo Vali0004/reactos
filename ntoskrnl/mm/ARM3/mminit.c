@@ -899,6 +899,16 @@ MiBuildPfnDatabaseFromLoaderBlock(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     PMMPTE PointerPte;
     PMMPDE PointerPde;
     KIRQL OldIrql;
+    ULONG_PTR Kseg0Va;
+#ifdef _M_ARM
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PFN_NUMBER RamBasePage;
+
+    /* the loader puts the start of RAM at KSEG0, the kernel image tells where that is */
+    LdrEntry = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+    RamBasePage = PFN_FROM_PTE(MiAddressToPte(LdrEntry->DllBase)) -
+                  (((ULONG_PTR)LdrEntry->DllBase - KSEG0_BASE) >> PAGE_SHIFT);
+#endif
 
     /* Now loop through the descriptors */
     NextEntry = LoaderBlock->MemoryDescriptorListHead.Flink;
@@ -984,12 +994,17 @@ MiBuildPfnDatabaseFromLoaderBlock(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
             default:
 
                 /* Map these pages with the KSEG0 mapping that adds 0x80000000 */
-                PointerPte = MiAddressToPte(KSEG0_BASE + (PageFrameIndex << PAGE_SHIFT));
+#ifdef _M_ARM
+                Kseg0Va = KSEG0_BASE + ((PageFrameIndex - RamBasePage) << PAGE_SHIFT);
+#else
+                Kseg0Va = KSEG0_BASE + (PageFrameIndex << PAGE_SHIFT);
+#endif
+                PointerPte = MiAddressToPte(Kseg0Va);
                 Pfn1 = MiGetPfnEntry(PageFrameIndex);
                 while (PageCount--)
                 {
                     /* Check if the page is really unused */
-                    PointerPde = MiAddressToPde(KSEG0_BASE + (PageFrameIndex << PAGE_SHIFT));
+                    PointerPde = MiAddressToPde(Kseg0Va);
                     if (!Pfn1->u3.e2.ReferenceCount)
                     {
                         /* Mark it as being in-use */
@@ -1021,6 +1036,7 @@ MiBuildPfnDatabaseFromLoaderBlock(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
                     Pfn1++;
                     PageFrameIndex++;
                     PointerPte++;
+                    Kseg0Va += PAGE_SIZE;
                 }
                 break;
         }

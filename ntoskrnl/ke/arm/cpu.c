@@ -201,7 +201,31 @@ KeFlushIoBuffers(
     _In_ BOOLEAN ReadOperation,
     _In_ BOOLEAN DmaOperation)
 {
-    DbgBreakPoint();
+    ULONG_PTR Address, End;
+    ULONG Ctr, LineSize;
+
+    /* DMA is coherent on the supported machines, a CPU copy may be code that runs later */
+    if (DmaOperation || !ReadOperation)
+        return;
+
+    if (Mdl->MdlFlags & (MDL_MAPPED_TO_SYSTEM_VA | MDL_SOURCE_IS_NONPAGED_POOL))
+    {
+        /* smallest D-cache line from CTR.DminLine, in words */
+        Ctr = _MoveFromCoprocessor(15, 0, 0, 0, 1);
+        LineSize = 4 << ((Ctr >> 16) & 0xF);
+
+        Address = (ULONG_PTR)Mdl->MappedSystemVa & ~(LineSize - 1);
+        End = (ULONG_PTR)Mdl->MappedSystemVa + Mdl->ByteCount;
+        for (; Address < End; Address += LineSize)
+            _MoveToCoprocessor(Address, 15, 0, 7, 11, 1);    /* DCCMVAU */
+        __dsb(_ARM_BARRIER_ISH);
+    }
+
+    /* the I-cache and branch predictor forget whatever they held for these pages */
+    _MoveToCoprocessor(0, 15, 0, 7, 1, 0);                   /* ICIALLUIS */
+    _MoveToCoprocessor(0, 15, 0, 7, 1, 6);                   /* BPIALLIS */
+    __dsb(_ARM_BARRIER_ISH);
+    __isb(_ARM_BARRIER_SY);
 }
 
 /* SYSTEM CALLS NOT VALID ON THIS CPU *****************************************/

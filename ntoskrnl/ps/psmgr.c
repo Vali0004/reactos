@@ -102,6 +102,7 @@ PspLookupKernelUserEntryPoints(VOID)
                                           &KeRaiseUserExceptionDispatcher);
     if (!NT_SUCCESS(Status)) return Status;
 
+#ifndef _M_ARM
     /* Get user-mode SLIST exception functions for page fault rollback race hack */
     Status = PspLookupSystemDllEntryPoint("ExpInterlockedPopEntrySListEnd",
                                           &KeUserPopEntrySListEnd);
@@ -112,6 +113,7 @@ PspLookupKernelUserEntryPoints(VOID)
     Status = PspLookupSystemDllEntryPoint("ExpInterlockedPopEntrySListResume",
                                           &KeUserPopEntrySListResume);
     if (!NT_SUCCESS(Status)) { DPRINT1("this not found\n"); return Status; }
+#endif /* the ARM pop is C with no rollback point, ntdll has no labels to export */
 
     /* On x86, there are multiple ways to do a system call, find the right stubs */
 #if defined(_X86_)

@@ -302,6 +302,10 @@ KiInitializeUserApc(IN PKEXCEPTION_FRAME ExceptionFrame,
     TrapFrame->R3 = (ULONG)NormalRoutine;
     TrapFrame->Sp = Stack;
     TrapFrame->Lr = (ULONG)KeUserApcDispatcher;
+
+    /* the thread resumes in the dispatcher, the context it had is on the stack */
+    TrapFrame->Pc = (ULONG)KeUserApcDispatcher & ~1;
+    TrapFrame->Cpsr |= CPSRC_THUMB;
 }
 
 NTSTATUS
