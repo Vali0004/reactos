@@ -1,52 +1,35 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         BSD - See COPYING.ARM in the top level directory
- * FILE:            ntoskrnl/ke/arm/boot.s
- * PURPOSE:         Implements the kernel entry point for ARM machines
- * PROGRAMMERS:     ReactOS Portable Systems Group
+ * PROJECT:     ReactOS Kernel
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     ARMv7 boot stack switch, after the ARM64 one
+ * COPYRIGHT:   Copyright 2026 Jonathan McAvin <mcavinjohn@gmail.com>
  */
 
 #include <ksarm.h>
 
+/* KeInitializeThread builds the idle thread's frames right below its initial stack */
+#define BOOT_STACK_RESERVE  (KTRAP_FRAME_LENGTH + KEXCEPTION_FRAME_LENGTH + \
+                             KSTART_FRAME_LENGTH + KSWITCH_FRAME_LENGTH)
+
+    IMPORT KiSystemStartupBootStack
+
     TEXTAREA
 
-    IMPORT KiInitializeSystem
-
-    NESTED_ENTRY KiSystemStartup
-    PROLOG_END KiSystemStartup
-
-    /* Put us in FIQ mode, set IRQ stack */
-    b .
-    mrs r3, cpsr
-    orr r3, r1, #CPSRM_FIQ
-    //msr cpsr, r3
-    msr cpsr_fc, r3
-    ldr sp, [a1, #LpbKernelStack]
-
-    /* Repeat for IRQ mode */
-    mov r3, #CPSRM_INT
-    msr cpsr_c, r3
-    ldr sp, [a1, #LpbKernelStack]
-
-    /* Put us in ABORT mode and set the panic stack */
-    mov r3, #CPSRM_ABT
-    msr cpsr_c, r3
-    ldr sp, [a1, #LpbKernelStack]
-
-    /* Repeat for UDF (Undefined) mode */
-    mov r3, #CPSRM_UDF
-    msr cpsr_c, r3
-    ldr sp, [a1, #LpbKernelStack]
-
-    /* Put us into SVC (Supervisor) mode and set the kernel stack */
-    mov r3, #CPSRM_SVC
-    msr cpsr_c, r3
-    ldr sp, [a1, #LpbKernelStack]
-
-    /* Go to C code */
-    b KiInitializeSystem
-
-    NESTED_END KiSystemStartup
+//
+// DECLSPEC_NORETURN
+// VOID
+// KiSwitchToBootStack(
+//     _In_ ULONG_PTR InitialStack);
+//
+// Every exception is taken on the SVC stack, the banked stacks of the other
+// modes are never used and stay unset.
+//
+    LEAF_ENTRY KiSwitchToBootStack
+    sub     r0, r0, #BOOT_STACK_RESERVE
+    mov     sp, r0
+    movs    r11, #0
+    movs    lr, #0
+    b       KiSystemStartupBootStack
+    LEAF_END KiSwitchToBootStack
 
     END
-/* EOF */

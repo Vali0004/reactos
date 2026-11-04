@@ -1,9 +1,8 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         BSD - See COPYING.ARM in the top level directory
- * FILE:            ntoskrnl/ke/arm/kiinit.c
- * PURPOSE:         Implements the kernel entry point for ARM machines
- * PROGRAMMERS:     ReactOS Portable Systems Group
+ * PROJECT:     ReactOS Kernel
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     ARMv7 kernel entry and initialization, after the ARM64 one
+ * COPYRIGHT:   Copyright 2026 Jonathan McAvin <mcavinjohn@gmail.com>
  */
 
 /* INCLUDES *******************************************************************/
@@ -12,183 +11,71 @@
 #define NDEBUG
 #include <debug.h>
 
-/* The loader's console print, valid while its identity mapping is, as on ARM64 */
-ULONG (*FrLdrDbgPrint)(const char *Format, ...);
+/* SCTLR, CPACR and FPEXC bits */
+#define SCTLR_V                 0x00002000  /* high vectors, off for VBAR */
+#define SCTLR_TE                0x40000000  /* exceptions in Thumb state */
+#define CPACR_CP10_CP11         0x00F00000  /* VFP and NEON for every mode */
+#define FPEXC_EN                0x40000000
 
 /* GLOBALS ********************************************************************/
 
-KINTERRUPT KxUnexpectedInterrupt;
-BOOLEAN KeIsArmV6;
+/* KIPCR() masks the low bits of TPIDRPRW, the PCR has to be page aligned */
+KIPCR DECLSPEC_ALIGN(PAGE_SIZE) KiInitialPcr;
+
+/* Boot stack of the first processor */
+UCHAR DECLSPEC_ALIGN(16) KiP0BootStackData[KERNEL_STACK_SIZE] = {0};
+PVOID KiP0BootStack = &KiP0BootStackData[KERNEL_STACK_SIZE];
+
 ULONG KeNumberProcessIds;
 ULONG KeNumberTbEntries;
 ULONG ProcessCount; // PERF
-extern PVOID KiArmVectorTable;
-#define __ARMV6__ KeIsArmV6
+
+/* trap.s */
+extern UCHAR KiArmVectorTable[];
+
+/* The loader's console print, valid while its identity mapping is, as on ARM64 */
+ULONG (*FrLdrDbgPrint)(const char *Format, ...);
+
+#define KiEarlyTrace(...) \
+    do { if (FrLdrDbgPrint) FrLdrDbgPrint(__VA_ARGS__); } while (0)
+
+/* boot.s */
+DECLSPEC_NORETURN
+VOID
+KiSwitchToBootStack(
+    _In_ ULONG_PTR InitialStack);
 
 /* FUNCTIONS ******************************************************************/
 
+CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitMachineDependent(VOID)
 {
-    /* There is nothing to do on ARM */
-    return;
+    /* Nothing to set up later for now */
 }
 
+static
 VOID
-NTAPI
-KiInitializeKernel(IN PKPROCESS InitProcess,
-                   IN PKTHREAD InitThread,
-                   IN PVOID IdleStack,
-                   IN PKPRCB Prcb,
-                   IN CCHAR Number,
-                   IN PLOADER_PARAMETER_BLOCK LoaderBlock)
+KiInitializePcr(
+    _Out_ PKIPCR Pcr,
+    _In_ ULONG ProcessorNumber,
+    _In_ PKTHREAD IdleThread)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
-    ULONG PageDirectory[2];
-    ULONG i;
+    RtlZeroMemory(Pcr, sizeof(*Pcr));
 
-    /* Set the default NX policy (opt-in) */
-    SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_OPTIN;
-
-    /* Initialize spinlocks and DPC data */
-    KiInitSpinLocks(Prcb, Number);
-
-    /* Set stack pointers */
-    //Pcr->InitialStack = IdleStack;
-    Pcr->Prcb.SpBase = IdleStack; // ???
-
-    /* Check if this is the Boot CPU */
-    if (!Number)
-    {
-        /* KiArmInterruptTrap reports vectors without an interrupt object itself */
-
-        /* Set DMA coherency */
-        KiDmaIoCoherency = 0;
-
-        /* Sweep D-Cache */
-        HalSweepDcache();
-
-        /* Set boot-level flags */
-        KeProcessorArchitecture = PROCESSOR_ARCHITECTURE_ARM;
-        KeFeatureBits = 0;
-        /// FIXME: just a wild guess
-        KeProcessorLevel = (USHORT)(Pcr->Prcb.ProcessorState.ArchState.Cp15_Cr0_CpuId >> 8);
-        KeProcessorRevision = (USHORT)(Pcr->Prcb.ProcessorState.ArchState.Cp15_Cr0_CpuId & 0xFF);
-#if 0
-        /* Set the current MP Master KPRCB to the Boot PRCB */
-        Prcb->MultiThreadSetMaster = Prcb;
-#endif
-        /* Lower to APC_LEVEL */
-        KeLowerIrql(APC_LEVEL);
-
-        /* Initialize portable parts of the OS */
-        KiInitSystem();
-
-        /* Initialize the Idle Process and the Process Listhead */
-        InitializeListHead(&KiProcessListHead);
-        PageDirectory[0] = 0;
-        PageDirectory[1] = 0;
-        KeInitializeProcess(InitProcess,
-                            0,
-                            MAXULONG_PTR,
-                            PageDirectory,
-                            FALSE);
-        InitProcess->QuantumReset = MAXCHAR;
-    }
-    else
-    {
-        /* FIXME-V6: See if we want to support MP */
-        DPRINT1("ARM MPCore not supported\n");
-    }
-
-    /* Setup the Idle Thread */
-    KeInitializeThread(InitProcess,
-                       InitThread,
-                       NULL,
-                       NULL,
-                       NULL,
-                       NULL,
-                       NULL,
-                       IdleStack);
-    InitThread->NextProcessor = Number;
-    InitThread->Priority = HIGH_PRIORITY;
-    InitThread->State = Running;
-    InitThread->Affinity = 1 << Number;
-    InitThread->WaitIrql = DISPATCH_LEVEL;
-    InitProcess->ActiveProcessors = 1 << Number;
-
-    /* HACK for MmUpdatePageDir */
-    ((PETHREAD)InitThread)->ThreadsProcess = (PEPROCESS)InitProcess;
-
-    /* Set up the thread-related fields in the PRCB */
-    Prcb->CurrentThread = InitThread;
-    Prcb->NextThread = NULL;
-    Prcb->IdleThread = InitThread;
-
-    /* Initialize the Kernel Executive */
-    ExpInitializeExecutive(Number, LoaderBlock);
-
-    /* Only do this on the boot CPU */
-    if (!Number)
-    {
-        /* Calculate the time reciprocal */
-        KiTimeIncrementReciprocal =
-            KiComputeReciprocal(KeMaximumIncrement,
-                                &KiTimeIncrementShiftCount);
-
-        /* Update DPC Values in case they got updated by the executive */
-        Prcb->MaximumDpcQueueDepth = KiMaximumDpcQueueDepth;
-        Prcb->MinimumDpcRate = KiMinimumDpcRate;
-        Prcb->AdjustDpcThreshold = KiAdjustDpcThreshold;
-    }
-
-    /* Raise to Dispatch */
-    KfRaiseIrql(DISPATCH_LEVEL);
-
-    /* Set the Idle Priority to 0. This will jump into Phase 1 */
-    KeSetPriorityThread(InitThread, 0);
-
-    /* If there's no thread scheduled, put this CPU in the Idle summary */
-    KiAcquirePrcbLock(Prcb);
-    if (!Prcb->NextThread) KiIdleSummary |= 1 << Number;
-    KiReleasePrcbLock(Prcb);
-
-    /* Raise back to HIGH_LEVEL and clear the PRCB for the loader block */
-    KfRaiseIrql(HIGH_LEVEL);
-    LoaderBlock->Prcb = 0;
-}
-
-//C_ASSERT((PKIPCR)KeGetPcr() == (PKIPCR)0xFFDFF000);
-//C_ASSERT((FIELD_OFFSET(KIPCR, FirstLevelDcacheSize) & 4) == 0);
-//C_ASSERT(sizeof(KIPCR) <= PAGE_SIZE);
-
-VOID
-NTAPI
-KiInitializePcr(IN ULONG ProcessorNumber,
-                IN PKIPCR Pcr,
-                IN PKTHREAD IdleThread,
-                IN PVOID PanicStack,
-                IN PVOID InterruptStack)
-{
-    ULONG i;
-
-    /* Set the Current Thread */
-    Pcr->Prcb.CurrentThread = IdleThread;
-
-    /* Set pointers to ourselves */
     Pcr->Self = (PKPCR)Pcr;
     Pcr->CurrentPrcb = &Pcr->Prcb;
-
-    /* Set the PCR Version */
+    Pcr->LockArray = Pcr->Prcb.LockQueue;
     Pcr->MajorVersion = PCR_MAJOR_VERSION;
     Pcr->MinorVersion = PCR_MINOR_VERSION;
+    Pcr->StallScaleFactor = INITIAL_STALL_COUNT;
 
-    /* Set the PCRB Version */
+    /* Interrupts stay masked until the idle loop, the IRQL goes up after KD is ready */
+    Pcr->CurrentIrql = PASSIVE_LEVEL;
+
     Pcr->Prcb.MajorVersion = PRCB_MAJOR_VERSION;
     Pcr->Prcb.MinorVersion = PRCB_MINOR_VERSION;
-
-    /* Set the Build Type */
     Pcr->Prcb.BuildType = 0;
 #ifndef CONFIG_SMP
     Pcr->Prcb.BuildType |= PRCB_BUILD_UNIPROCESSOR;
@@ -197,236 +84,225 @@ KiInitializePcr(IN ULONG ProcessorNumber,
     Pcr->Prcb.BuildType |= PRCB_BUILD_DEBUG;
 #endif
 
-    /* Set the Processor Number and current Processor Mask */
-    Pcr->Prcb.Number = (UCHAR)ProcessorNumber;
-    Pcr->Prcb.SetMember = 1 << ProcessorNumber;
-
-    /* Set the PRCB for this Processor */
-    KiProcessorBlock[ProcessorNumber] = Pcr->CurrentPrcb;
-
-    /* Start us out at PASSIVE_LEVEL */
-    Pcr->CurrentIrql = PASSIVE_LEVEL;
-
-    /* Set the stacks */
-    Pcr->Prcb.PanicStackBase = (ULONG)PanicStack;
-    Pcr->Prcb.IsrStack = InterruptStack;
-#if 0
-    /* Setup the processor set */
+    Pcr->Prcb.LegacyNumber = (UCHAR)ProcessorNumber;
+    Pcr->Prcb.Number = ProcessorNumber;
+    Pcr->Prcb.SetMember = AFFINITY_MASK(ProcessorNumber);
     Pcr->Prcb.MultiThreadProcessorSet = Pcr->Prcb.SetMember;
-#endif
+    Pcr->Prcb.CurrentThread = IdleThread;
+    Pcr->Prcb.StartCycles = KxQueryProcessorCycleTime();
+}
 
-    /* Copy cache information from the loader block */
-    Pcr->Prcb.Cache[FirstLevelDcache].Type = CacheData;
-    Pcr->Prcb.Cache[FirstLevelDcache].Level = 1;
-    Pcr->Prcb.Cache[FirstLevelDcache].Associativity = 0; // FIXME
-    Pcr->Prcb.Cache[FirstLevelDcache].LineSize = KeLoaderBlock->u.Arm.FirstLevelDcacheFillSize;
-    Pcr->Prcb.Cache[FirstLevelDcache].Size = KeLoaderBlock->u.Arm.FirstLevelDcacheSize;
+static
+VOID
+KiInitializeCpu(
+    _In_ PKIPCR Pcr)
+{
+    ULONG Value;
 
-    Pcr->Prcb.Cache[SecondLevelDcache].Type = CacheData;
-    Pcr->Prcb.Cache[SecondLevelDcache].Level = 2;
-    Pcr->Prcb.Cache[SecondLevelDcache].Associativity = 0; // FIXME
-    Pcr->Prcb.Cache[SecondLevelDcache].LineSize = KeLoaderBlock->u.Arm.SecondLevelDcacheFillSize;
-    Pcr->Prcb.Cache[SecondLevelDcache].Size = KeLoaderBlock->u.Arm.SecondLevelDcacheSize;
+    /* The vector table takes Thumb exceptions through VBAR */
+    _MoveToCoprocessor((ULONG)KiArmVectorTable, 15, 0, 12, 0, 0);
+    Value = _MoveFromCoprocessor(15, 0, 1, 0, 0);
+    Value = (Value & ~SCTLR_V) | SCTLR_TE;
+    _MoveToCoprocessor(Value, 15, 0, 1, 0, 0);
 
-    Pcr->Prcb.Cache[FirstLevelIcache].Type = CacheInstruction;
-    Pcr->Prcb.Cache[FirstLevelIcache].Level = 1;
-    Pcr->Prcb.Cache[FirstLevelIcache].Associativity = 0; // FIXME
-    Pcr->Prcb.Cache[FirstLevelIcache].LineSize = KeLoaderBlock->u.Arm.FirstLevelIcacheFillSize;
-    Pcr->Prcb.Cache[FirstLevelIcache].Size = KeLoaderBlock->u.Arm.FirstLevelIcacheSize;
+    /* Windows on ARM is hard float, the kernel itself uses VFP registers */
+    Value = _MoveFromCoprocessor(15, 0, 1, 0, 2);
+    _MoveToCoprocessor(Value | CPACR_CP10_CP11, 15, 0, 1, 0, 2);
+    __isb(_ARM_BARRIER_SY);
+    __asm__ __volatile__("vmsr fpexc, %0" : : "r" (FPEXC_EN));
 
-    Pcr->Prcb.Cache[SecondLevelIcache].Type = CacheInstruction;
-    Pcr->Prcb.Cache[SecondLevelIcache].Level = 2;
-    Pcr->Prcb.Cache[SecondLevelIcache].Associativity = 0; // FIXME
-    Pcr->Prcb.Cache[SecondLevelIcache].LineSize = KeLoaderBlock->u.Arm.SecondLevelIcacheFillSize;
-    Pcr->Prcb.Cache[SecondLevelIcache].Size = KeLoaderBlock->u.Arm.SecondLevelIcacheSize;
-
-    /* Set global d-cache fill and alignment values */
-    if (Pcr->Prcb.Cache[SecondLevelDcache].Size == 0)
-    {
-        /* Use the first level */
-        Pcr->Prcb.Cache[GlobalDcache] = Pcr->Prcb.Cache[FirstLevelDcache];
-    }
-    else
-    {
-        /* Use the second level */
-        Pcr->Prcb.Cache[GlobalDcache] = Pcr->Prcb.Cache[SecondLevelDcache];
-    }
-
-    /* Set the alignment */
-    //Pcr->DcacheAlignment = Pcr->DcacheFillSize - 1;
-
-    /* Set global i-cache fill and alignment values */
-    if (Pcr->Prcb.Cache[SecondLevelIcache].Size == 0)
-    {
-        /* Use the first level */
-        Pcr->Prcb.Cache[GlobalIcache] = Pcr->Prcb.Cache[FirstLevelIcache];
-    }
-    else
-    {
-        /* Use the second level */
-        Pcr->Prcb.Cache[GlobalIcache] = Pcr->Prcb.Cache[SecondLevelIcache];
-    }
-
-    /* Set the alignment */
-    //Pcr->IcacheAlignment = Pcr->IcacheFillSize - 1;
-
-    /* Set processor information */
-    //Pcr->ProcessorId = KeArmIdCodeRegisterGet().AsUlong;
-
-    /* Idt holds the interrupt objects, the software vectors are dispatched by number */
-    for (i = 0; i < RTL_NUMBER_OF(Pcr->Idt); i++)
-        Pcr->Idt[i] = NULL;
-
-    /* Set default stall factor */
-    Pcr->StallScaleFactor = 50;
-
-    /* Setup software interrupts */
-#if 0
-    Pcr->ReservedVectors = (1 << PASSIVE_LEVEL) |
-                           (1 << APC_LEVEL) |
-                           (1 << DISPATCH_LEVEL) |
-                           (1 << IPI_LEVEL);
-#endif
+    /* MIDR tells the part and revision */
+    Value = _MoveFromCoprocessor(15, 0, 0, 0, 0);
+    Pcr->Prcb.ProcessorState.ArchState.Cp15_Cr0_CpuId = Value;
+    __isb(_ARM_BARRIER_SY);
 }
 
 VOID
-KiInitializeMachineType(VOID)
+NTAPI
+KiInitializeHandBuiltThread(
+    _In_ PKTHREAD Thread,
+    _In_ PKPROCESS Process,
+    _In_ PVOID Stack)
 {
-    /* Detect ARM version */
-    KeIsArmV6 = KeArmIdCodeRegisterGet().Architecture >= 7;
+    PKPRCB Prcb = KeGetCurrentPrcb();
 
-    /* Set the number of TLB entries and ASIDs */
-    KeNumberTbEntries = 64;
-    if (__ARMV6__)
-    {
-        /* 256 ASIDs on v6/v7 */
-        KeNumberProcessIds = 256;
-    }
-    else
-    {
-        /* The TLB is VIVT on v4/v5 */
-        KeNumberProcessIds = 0;
-    }
+    KeInitializeThread(Process, Thread, NULL, NULL, NULL, NULL, NULL, Stack);
+
+    Thread->NextProcessor = Prcb->Number;
+    Thread->IdealProcessor = Prcb->Number;
+    Thread->Priority = HIGH_PRIORITY;
+    Thread->State = Running;
+    Thread->Affinity = AFFINITY_MASK(Prcb->Number);
+    Thread->WaitIrql = DISPATCH_LEVEL;
+    Process->ActiveProcessors |= AFFINITY_MASK(Prcb->Number);
 }
 
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiInitializeKernel(
+    _In_ PKPROCESS InitProcess,
+    _In_ PKTHREAD InitThread,
+    _In_ PVOID IdleStack,
+    _In_ PKPRCB Prcb,
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    ULONG_PTR PageDirectory[2];
+    PVOID DpcStack;
+
+    Prcb->MultiThreadSetMaster = Prcb;
+
+    /* the portable parts, timers, bugcheck callbacks and the service tables */
+    KiInitSystem();
+
+    InitializeListHead(&KiProcessListHead);
+
+    /* The idle process keeps the loader's page tables, MmInitSystem fills these in */
+    PageDirectory[0] = 0;
+    PageDirectory[1] = 0;
+    KeInitializeProcess(InitProcess, 0, MAXULONG_PTR, PageDirectory, FALSE);
+    InitProcess->QuantumReset = MAXCHAR;
+
+    /* the table TTBR0 walks belongs to the idle process too */
+    InitProcess->FirstLevelTable = _MoveFromCoprocessor(15, 0, 2, 0, 0) & ~0x3FFFUL;
+
+    KiInitializeHandBuiltThread(InitThread, InitProcess, IdleStack);
+
+    /* Phase 0 of the memory manager drops the identity mapping the loader runs on */
+    KiEarlyTrace("KiInitializeKernel: executive phase 0 next, loader console ends here\n");
+    FrLdrDbgPrint = NULL;
+
+    ExpInitializeExecutive(0, LoaderBlock);
+
+    KiTimeIncrementReciprocal = KiComputeReciprocal(KeMaximumIncrement,
+                                                    &KiTimeIncrementShiftCount);
+
+    Prcb->MaximumDpcQueueDepth = KiMaximumDpcQueueDepth;
+    Prcb->MinimumDpcRate = KiMinimumDpcRate;
+    Prcb->AdjustDpcThreshold = KiAdjustDpcThreshold;
+
+    DpcStack = MmCreateKernelStack(FALSE, 0);
+    if (!DpcStack)
+        KeBugCheckEx(NO_PAGES_AVAILABLE, 1, 0, 0, 0);
+    Prcb->DpcStack = DpcStack;
+}
+
+CODE_SEG("INIT")
 DECLSPEC_NORETURN
 VOID
-KiInitializeSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
+NTAPI
+KiSystemStartupBootStack(VOID)
 {
-    ULONG Cpu;
-    PKTHREAD InitialThread;
-    PKPROCESS InitialProcess;
-    ARM_CONTROL_REGISTER ControlRegister;
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
-    PKTHREAD Thread;
+    PLOADER_PARAMETER_BLOCK LoaderBlock = KeLoaderBlock;
+    PKPRCB Prcb = KeGetCurrentPrcb();
+    PKTHREAD Thread = (PKTHREAD)KeLoaderBlock->Thread;
+    PKPROCESS Process = Thread->ApcState.Process;
+    PVOID KernelStack = (PVOID)KeLoaderBlock->KernelStack;
 
-    /* Flush the TLB */
-    KeFlushTb();
+    Prcb->ParentNode = KeNodeBlock[0];
+    Prcb->ParentNode->ProcessorMask |= Prcb->SetMember;
 
-    /* Save the loader block and get the current CPU */
-    KeLoaderBlock = LoaderBlock;
-    Cpu = KeNumberProcessors;
+    PoInitializePrcb(Prcb);
+    KiSaveProcessorControlState(&Prcb->ProcessorState);
+    KiInitSpinLocks(Prcb, Prcb->Number);
 
-    /* Save the initial thread and process */
-    InitialThread = (PKTHREAD)LoaderBlock->Thread;
-    InitialProcess = (PKPROCESS)LoaderBlock->Process;
+    Prcb->CurrentThread = Thread;
+    Prcb->NextThread = NULL;
+    Prcb->IdleThread = Thread;
 
-    /* Clean the APC List Head */
-    InitializeListHead(&InitialThread->ApcState.ApcListHead[KernelMode]);
+    ExInitPoolLookasidePointers();
 
-    /* Initialize the machine type */
-    KiInitializeMachineType();
+    KeLowerIrql(APC_LEVEL);
+    KiEarlyTrace("KiSystemStartupBootStack: on the boot stack\n");
 
-    /* Skip initial setup if this isn't the Boot CPU */
-    if (Cpu) goto AppCpuInit;
+    if (Prcb->Number == 0)
+        KiInitializeKernel(Process, Thread, KernelStack, Prcb, LoaderBlock);
+    else
+        KiInitializeHandBuiltThread(Thread, Process, KernelStack);
 
-    /* Initialize the PCR */
-    RtlZeroMemory(Pcr, PAGE_SIZE);
-    KiInitializePcr(Cpu,
-                    Pcr,
-                    InitialThread,
-                    (PVOID)LoaderBlock->u.Arm.PanicStack,
-                    (PVOID)LoaderBlock->u.Arm.InterruptStack);
+    /* Become the idle thread */
+    KfRaiseIrql(DISPATCH_LEVEL);
+    KeSetPriorityThread(Thread, 0);
 
-    /* Now sweep caches */
-    HalSweepIcache();
-    HalSweepDcache();
+    KiAcquirePrcbLock(Prcb);
+    if (!Prcb->NextThread)
+        KiIdleSummary |= Prcb->SetMember;
+    KiReleasePrcbLock(Prcb);
 
-    /* Set us as the current process */
-    InitialThread->ApcState.Process = InitialProcess;
-
-AppCpuInit:
-    /* Setup CPU-related fields */
-    Pcr->Prcb.Number = Cpu;
-    Pcr->Prcb.SetMember = 1 << Cpu;
-
-    /* Initialize the Processor with HAL */
-    HalInitializeProcessor(Cpu, KeLoaderBlock);
-
-    /* Set active processors */
-    KeActiveProcessors |= Pcr->Prcb.SetMember;
-    KeNumberProcessors++;
-
-    /* Check if this is the boot CPU */
-    if (!Cpu)
-    {
-        /* Initialize debugging system */
-        KdInitSystem(0, KeLoaderBlock);
-
-        /* Check for break-in */
-        if (KdPollBreakIn()) DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
-    }
-
-    /* Raise to HIGH_LEVEL */
     KfRaiseIrql(HIGH_LEVEL);
+    LoaderBlock->Prcb = 0;
 
-    /* Set the exception address to high */
-    ControlRegister = KeArmControlRegisterGet();
-    ControlRegister.HighVectors = TRUE;
-    KeArmControlRegisterSet(ControlRegister);
-
-    /* Setup the exception vector table */
-    RtlCopyMemory((PVOID)0xFFFF0000, &KiArmVectorTable, 14 * sizeof(PVOID));
-
-    /* Initialize the rest of the kernel now */
-    KiInitializeKernel((PKPROCESS)LoaderBlock->Process,
-                       (PKTHREAD)LoaderBlock->Thread,
-                       (PVOID)LoaderBlock->KernelStack,
-                       &Pcr->Prcb,
-                       Pcr->Prcb.Number,
-                       KeLoaderBlock);
-
-    /* Set the priority of this thread to 0 */
     Thread = KeGetCurrentThread();
     Thread->Priority = 0;
 
-    /* Force interrupts enabled and lower IRQL back to DISPATCH_LEVEL */
     _enable();
-    KfLowerIrql(DISPATCH_LEVEL);
-
-    /* Set the right wait IRQL */
+    KeLowerIrql(DISPATCH_LEVEL);
     Thread->WaitIrql = DISPATCH_LEVEL;
 
-    /* Jump into the idle loop */
     KiIdleLoop();
 }
 
-ULONG
-DbgPrintEarly(const char *fmt, ...)
+CODE_SEG("INIT")
+DECLSPEC_NORETURN
+VOID
+NTAPI
+KiSystemStartup(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    va_list args;
-    unsigned int i;
-    char Buffer[1024];
-    PCHAR String = Buffer;
+    PKTHREAD InitialThread;
+    PKIPCR Pcr;
+    CCHAR Cpu;
 
-    va_start(args, fmt);
-    i = vsprintf(Buffer, fmt, args);
-    va_end(args);
+    FrLdrDbgPrint = LoaderBlock->u.I386.CommonDataArea;
+    KiEarlyTrace("KiSystemStartup: loader block %p\n", LoaderBlock);
 
-    /* Output the message through the loader until the kernel debugger is up */
-    UNREFERENCED_PARAMETER(i);
-    if (FrLdrDbgPrint)
-        FrLdrDbgPrint("%s", String);
+    Cpu = KeNumberProcessors++;
 
-    return STATUS_SUCCESS;
+    if (Cpu == 0)
+    {
+        KeLoaderBlock = LoaderBlock;
+        LoaderBlock->KernelStack = (ULONG_PTR)KiP0BootStack;
+        LoaderBlock->Thread = (ULONG_PTR)&KiInitialThread.Tcb;
+        LoaderBlock->Process = (ULONG_PTR)&KiInitialProcess.Pcb;
+        LoaderBlock->Prcb = (ULONG_PTR)&KiInitialPcr.Prcb;
+    }
+
+    /* Nothing may touch the PCR before TPIDRPRW points at it */
+    Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
+    InitialThread = (PKTHREAD)LoaderBlock->Thread;
+    KiInitializePcr(Pcr, Cpu, InitialThread);
+    _MoveToCoprocessor((ULONG)Pcr, 15, 0, 13, 0, 4);
+    KiEarlyTrace("KiSystemStartup: PCR %p\n", Pcr);
+
+    KiProcessorBlock[Cpu] = &Pcr->Prcb;
+    InitialThread->ApcState.Process = (PVOID)LoaderBlock->Process;
+
+    KiInitializeCpu(Pcr);
+    KiEarlyTrace("KiSystemStartup: processor %d set up\n", Cpu);
+
+    if (Cpu == 0)
+    {
+        KeFeatureBits = 0;
+        KeProcessorArchitecture = PROCESSOR_ARCHITECTURE_ARM;
+        KeProcessorLevel = (USHORT)((Pcr->Prcb.ProcessorState.ArchState.Cp15_Cr0_CpuId >> 4) & 0xFFF);
+        KeProcessorRevision = (USHORT)(Pcr->Prcb.ProcessorState.ArchState.Cp15_Cr0_CpuId & 0xF);
+    }
+
+    HalInitializeProcessor(Cpu, KeLoaderBlock);
+    KeActiveProcessors |= AFFINITY_MASK(Cpu);
+    KiEarlyTrace("KiSystemStartup: HAL processor init done\n");
+
+    if (Cpu == 0)
+    {
+        KdInitSystem(0, KeLoaderBlock);
+        KiEarlyTrace("KiSystemStartup: debugger initialized\n");
+        if (KdPollBreakIn())
+            DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
+    }
+
+    KfRaiseIrql(HIGH_LEVEL);
+    KiEarlyTrace("KiSystemStartup: switching to the boot stack %p\n", (PVOID)LoaderBlock->KernelStack);
+    KiSwitchToBootStack(LoaderBlock->KernelStack);
 }
+
+/* EOF */

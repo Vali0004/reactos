@@ -11,11 +11,6 @@
 
 /* INCLUDES ******************************************************************/
 
-/* ARM Bringup Hack */
-#ifdef _M_ARM
-#define DbgPrint DbgPrintEarly
-#endif
-
 /* WDK hacks */
 #ifdef _WIN64
 #define IoAllocateAdapterChannel _IoAllocateAdapterChannel
