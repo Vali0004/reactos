@@ -9,4 +9,5 @@ endif()
 
 if(ARCH STREQUAL "arm")
     add_subdirectory(halext/omap3)
+    add_subdirectory(halext/virt)
 endif()
