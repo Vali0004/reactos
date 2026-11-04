@@ -180,9 +180,9 @@
 @ stdcall -arch=i386 Exi386InterlockedDecrementLong(ptr)
 @ stdcall -arch=i386 Exi386InterlockedExchangeUlong(ptr long)
 @ stdcall -arch=i386 Exi386InterlockedIncrementLong(ptr)
-@ fastcall -arch=i386 ExiAcquireFastMutex(ptr) ExAcquireFastMutex
-@ fastcall -arch=i386 ExiReleaseFastMutex(ptr) ExReleaseFastMutex
-@ fastcall -arch=i386 ExiTryToAcquireFastMutex(ptr) ExTryToAcquireFastMutex
+@ fastcall -arch=i386,arm ExiAcquireFastMutex(ptr) ExAcquireFastMutex
+@ fastcall -arch=i386,arm ExiReleaseFastMutex(ptr) ExReleaseFastMutex
+@ fastcall -arch=i386,arm ExiTryToAcquireFastMutex(ptr) ExTryToAcquireFastMutex
 @ stdcall FsRtlAcquireFileExclusive(ptr)
 @ stdcall FsRtlAddBaseMcbEntry(ptr long long long long long long)
 @ stdcall FsRtlAddLargeMcbEntry(ptr long long long long long long)
@@ -694,7 +694,7 @@
 @ stdcall KeSetAffinityThread(ptr long)
 @ stdcall KeSetBasePriorityThread(ptr long)
 @ stdcall KeSetDmaIoCoherency(long)
-@ stdcall -arch=arm64 KeGetDmaIoCoherency()
+@ stdcall -arch=arm,arm64 KeGetDmaIoCoherency()
 @ stdcall KeSetEvent(ptr long long)
 @ stdcall KeSetEventBoostPriority(ptr ptr)
 @ stdcall KeSetIdealProcessorThread(ptr long)

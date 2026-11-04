@@ -156,6 +156,16 @@ KeSetDmaIoCoherency(IN ULONG Coherency)
 /*
  * @implemented
  */
+ULONG
+NTAPI
+KeGetDmaIoCoherency(VOID)
+{
+    return KiDmaIoCoherency;
+}
+
+/*
+ * @implemented
+ */
 VOID
 __cdecl
 KeSaveStateForHibernate(IN PKPROCESSOR_STATE State)

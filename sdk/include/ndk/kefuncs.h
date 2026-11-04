@@ -335,7 +335,7 @@ KeSetDmaIoCoherency(
     _In_ ULONG Coherency
 );
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
 /* KeSetDmaIoCoherency, the DMA masters do not snoop the data caches */
 #define KE_DMA_IO_NOT_COHERENT      0x00000001
 

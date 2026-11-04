@@ -15,13 +15,14 @@
 #define PSCI_SYSTEM_OFF     0x84000008
 #define PSCI_SYSTEM_RESET   0x84000009
 
-ULONG64
+/* the registers are as wide as the architecture's */
+ULONG_PTR
 NTAPI
 HalpCallFirmware(
-    _In_ ULONG64 Function,
-    _In_ ULONG64 Argument1,
-    _In_ ULONG64 Argument2,
-    _In_ ULONG64 Argument3,
+    _In_ ULONG_PTR Function,
+    _In_ ULONG_PTR Argument1,
+    _In_ ULONG_PTR Argument2,
+    _In_ ULONG_PTR Argument3,
     _In_ BOOLEAN UseHvc);
 
 VOID
@@ -41,7 +42,7 @@ HalReturnToFirmware(
     _In_ FIRMWARE_REENTRY Action)
 {
     BOOLEAN UseHvc;
-    ULONG64 Function;
+    ULONG_PTR Function;
 
     UseHvc = !!(HalpPlatform.ArmBootFlags & FADT_ARM_PSCI_USE_HVC);
     Function = ((Action == HalHaltRoutine) || (Action == HalPowerDownRoutine)) ?

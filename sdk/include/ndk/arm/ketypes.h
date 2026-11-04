@@ -190,6 +190,12 @@ typedef enum
 #define CPSRM_ABT            0x17
 #define CPSRM_UDF            0x1b
 #define CPSRM_SYS            0x1f
+
+//
+// Machine Types
+//
+#define MACHINE_TYPE_ISA        0x0000
+#define MACHINE_TYPE_EISA       0x0001
 #define CPSRM_MASK           0x1f
 #define SYSCALL_PSR          0x30
 

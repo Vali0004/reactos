@@ -1,9 +1,6 @@
-@ fastcall -arch=arm ExAcquireFastMutex(ptr)
-@ fastcall -arch=arm ExReleaseFastMutex(ptr)
-@ fastcall -arch=arm ExTryToAcquireFastMutex(ptr)
-@ fastcall -arch=i386 ExAcquireFastMutex(ptr) ntoskrnl.ExiAcquireFastMutex
-@ fastcall -arch=i386 ExReleaseFastMutex(ptr) ntoskrnl.ExiReleaseFastMutex
-@ fastcall -arch=i386 ExTryToAcquireFastMutex(ptr) ntoskrnl.ExiTryToAcquireFastMutex
+@ fastcall -arch=i386,arm ExAcquireFastMutex(ptr) ntoskrnl.ExiAcquireFastMutex
+@ fastcall -arch=i386,arm ExReleaseFastMutex(ptr) ntoskrnl.ExiReleaseFastMutex
+@ fastcall -arch=i386,arm ExTryToAcquireFastMutex(ptr) ntoskrnl.ExiTryToAcquireFastMutex
 @ stdcall HalAcquireDisplayOwnership(ptr)
 @ stdcall HalAdjustResourceList(ptr)
 @ stdcall HalAllProcessorsStarted()
@@ -16,10 +13,10 @@
 ;@ stdcall -arch=x86_64 HalCallBios()
 @ fastcall HalClearSoftwareInterrupt(long)
 @ stdcall -arch=i386,x86_64,arm64 HalConvertDeviceIdtToIrql(long)
-@ stdcall -arch=i386,x86_64,arm64 HalDisableInterrupt(ptr)
+@ stdcall -arch=i386,x86_64,arm,arm64 HalDisableInterrupt(ptr)
 @ stdcall HalDisableSystemInterrupt(long long)
 @ stdcall HalDisplayString(str)
-@ stdcall -arch=i386,x86_64,arm64 HalEnableInterrupt(ptr)
+@ stdcall -arch=i386,x86_64,arm,arm64 HalEnableInterrupt(ptr)
 @ stdcall HalEnableSystemInterrupt(long long long)
 @ stdcall -arch=i386,arm,arm64 HalEndSystemInterrupt(long long)
 @ stdcall HalFlushCommonBuffer(long long long long long)
@@ -31,7 +28,7 @@
 @ fastcall -arch=arm,arm64 HalGetInterruptSource()
 @ stdcall -arch=i386,x86_64 HalGetInterruptTargetInformation(long long ptr)
 @ stdcall HalGetInterruptVector(long long long long ptr ptr)
-@ stdcall -arch=i386,x86_64,arm64 HalGetMessageRoutingInfo(ptr ptr)
+@ stdcall -arch=i386,x86_64,arm,arm64 HalGetMessageRoutingInfo(ptr ptr)
 @ stdcall -arch=i386,x86_64 HalGetProcessorIdByNtNumber(long ptr)
 @ stdcall -arch=i386,x86_64 HalGetVectorInput(long ptr ptr ptr)
 ;@ stdcall -arch=x86_64 HalHandleMcheck()

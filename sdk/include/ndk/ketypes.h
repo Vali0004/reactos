@@ -1106,7 +1106,7 @@ typedef struct _KINTERRUPT
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONGLONG Rsvd1;
 #endif
-#ifdef _WIN64
+#if defined(_WIN64) || defined(_M_ARM)
     PKTRAP_FRAME TrapFrame;
     PVOID Reserved;
 #endif

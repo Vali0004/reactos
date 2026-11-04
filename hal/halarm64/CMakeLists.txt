@@ -25,8 +25,17 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/hal/halx86/acpi/mmconfig.c
     ${REACTOS_SOURCE_DIR}/hal/halx86/generic/dma.c)
 
-list(APPEND ASM_SOURCE
-    generic/cache.s)
+if(ARCH STREQUAL "arm")
+    # the uniprocessor spinlocks and IRQL wrappers the 32-bit HAL exports
+    list(APPEND SOURCE
+        ${REACTOS_SOURCE_DIR}/hal/halarm/generic/spinlock.c
+        generic/arm/portio.c)
+    list(APPEND ASM_SOURCE
+        generic/arm/cache.s)
+else()
+    list(APPEND ASM_SOURCE
+        generic/cache.s)
+endif()
 
 add_asm_files(hal_asm ${ASM_SOURCE})
 

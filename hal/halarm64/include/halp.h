@@ -7,7 +7,8 @@
 
 #pragma once
 
-/* GIC CPU interface registers */
+/* GIC CPU interface registers, halarm32.h has the AArch32 ones */
+#ifndef _M_ARM
 #define ARM64_ICC_PMR_EL1       ARM64_SYSREG(3, 0, 4, 6, 0)
 #define ARM64_ICC_RPR_EL1       ARM64_SYSREG(3, 0, 12, 11, 3)
 #define ARM64_ICC_SGI1R_EL1     ARM64_SYSREG(3, 0, 12, 11, 5)
@@ -17,6 +18,7 @@
 #define ARM64_ICC_CTLR_EL1      ARM64_SYSREG(3, 0, 12, 12, 4)
 #define ARM64_ICC_SRE_EL1       ARM64_SYSREG(3, 0, 12, 12, 5)
 #define ARM64_ICC_IGRPEN1_EL1   ARM64_SYSREG(3, 0, 12, 12, 7)
+#endif
 
 /* Interrupt IDs */
 #define GIC_SGI_COUNT           16

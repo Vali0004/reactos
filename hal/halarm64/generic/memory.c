@@ -75,6 +75,16 @@ HalpMapPhysicalMemory(
         return NULL;
 
     TempPte.u.Long = 0;
+#ifdef _M_ARM
+    /* short descriptor small page, kernel read write, never executed */
+    TempPte.u.Hard.Valid = 1;
+    TempPte.u.Hard.NoExecute = 1;
+    TempPte.u.Hard.Sbo = 1;
+    if (Device)
+        MI_MAKE_PTE_NON_CACHED(&TempPte);
+    else
+        MI_MAKE_PTE_CACHED(&TempPte);
+#else
     TempPte.u.Hard.Valid = 1;
     TempPte.u.Hard.NotLargePage = 1;
     TempPte.u.Hard.Accessed = 1;
@@ -90,6 +100,7 @@ HalpMapPhysicalMemory(
         TempPte.u.Hard.CacheType = MI_CACHE_TYPE_CACHED;
         TempPte.u.Hard.Shareability = 3;
     }
+#endif
 
     Pfn = (PFN_NUMBER)(PhysicalAddress.QuadPart >> PAGE_SHIFT);
     for (i = 0; i < PageCount; i++)

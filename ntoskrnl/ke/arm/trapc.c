@@ -539,6 +539,7 @@ KiArmInterruptTrap(
             do
             {
                 Interrupt = CONTAINING_RECORD(Entry, KINTERRUPT, InterruptListEntry);
+                Interrupt->TrapFrame = TrapFrame;
                 KeAcquireSpinLockAtDpcLevel(Interrupt->ActualLock);
                 Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
                 KeReleaseSpinLockFromDpcLevel(Interrupt->ActualLock);

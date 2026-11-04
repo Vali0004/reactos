@@ -29,7 +29,7 @@ ULONG64
 HalpReadCounter(VOID)
 {
     __isb(_ARM64_BARRIER_SY);
-    return (ULONG64)_ReadStatusReg(ARM64_CNTVCT);
+    return KeArm64ReadRegister(ARM64_CNTVCT);
 }
 
 /* Converts a duration in 100 ns units into counter ticks */

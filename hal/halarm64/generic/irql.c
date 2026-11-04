@@ -76,6 +76,23 @@ KfLowerIrql(
     HalpChangeIrql(NewIrql);
 }
 
+#ifdef _M_ARM
+/* the 32-bit ARM HAL exports these, on ARM64 the kernel inlines them */
+KIRQL
+NTAPI
+KeRaiseIrqlToDpcLevel(VOID)
+{
+    return KfRaiseIrql(DISPATCH_LEVEL);
+}
+
+KIRQL
+NTAPI
+KeRaiseIrqlToSynchLevel(VOID)
+{
+    return KfRaiseIrql(SYNCH_LEVEL);
+}
+#endif
+
 VOID
 FASTCALL
 HalRequestSoftwareInterrupt(

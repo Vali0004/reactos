@@ -29,9 +29,15 @@
 /* Internal shared ACPI header */
 #include <drivers/acpi/acpi.h>
 
-/* Internal kernel headers */
+/* Internal kernel headers, one HAL serves both ARM architectures */
+#ifdef _M_ARM
+#include <internal/arm/ke.h>
+#include <internal/arm/mm.h>
+#include "halarm32.h"
+#else
 #include <internal/arm64/ke.h>
 #include <internal/arm64/mm.h>
+#endif
 
 #define TAG_HAL ' laH'
 
