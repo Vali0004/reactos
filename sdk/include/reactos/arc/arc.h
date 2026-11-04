@@ -692,7 +692,23 @@ typedef struct _LOADER_PARAMETER_EXTENSION
     LOADER_PARAMETER_CI_EXTENSION *CodeIntegrityData;
     ULONG CodeIntegrityDataSize;
 #endif
+#if defined(__REACTOS__) && (NTDDI_VERSION < NTDDI_WIN8)
+    /* hal extensions as win8 passes them, check Size before use */
+    LIST_ENTRY HalExtensionModuleList;
+#endif
 } LOADER_PARAMETER_EXTENSION, *PLOADER_PARAMETER_EXTENSION;
+
+#ifdef __REACTOS__
+/* one loaded hal extension, the ids are those of the csrt group it was matched on */
+typedef struct _HAL_EXTENSION_MODULE_ENTRY
+{
+    LIST_ENTRY ListEntry;
+    ULONG VendorId;
+    USHORT DeviceId;
+    USHORT Reserved;
+    struct _LDR_DATA_TABLE_ENTRY *LdrEntry;
+} HAL_EXTENSION_MODULE_ENTRY, *PHAL_EXTENSION_MODULE_ENTRY;
+#endif
 
 //
 // Architecture specific Loader Parameter Blocks
