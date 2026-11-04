@@ -16,6 +16,7 @@
 #include <cportlib/uartinfo.h>
 #ifdef _M_ARM64
 #include <drivers/acpi/acpi.h>
+#include <fdtarc.h>
 #endif
 
 /* GLOBALS ********************************************************************/
@@ -213,11 +214,75 @@ KdpFindDbg2Port(
     return Found;
 }
 
+/* A 16550 only works with byte wide, unshifted registers, which is what cportlib drives */
+static
+BOOLEAN
+KdpFdtIs8BitUart(
+    _In_ const VOID *Fdt,
+    _In_ LONG Node)
+{
+    const VOID *Shift = FdtGetProperty(Fdt, Node, "reg-shift", NULL);
+    const VOID *Width = FdtGetProperty(Fdt, Node, "reg-io-width", NULL);
+
+    return (!Shift || !FdtRead32(Shift)) && (!Width || (FdtRead32(Width) == 1));
+}
+
+/**
+ * @brief Finds the serial port the device tree names in stdout-path.
+ *
+ * Boards without ACPI have no DBG2, the firmware console is the debug port then.
+ */
+static
+BOOLEAN
+KdpFindFdtPort(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _Out_ PPHYSICAL_ADDRESS PhysicalAddress,
+    _Out_ PUSHORT Subtype)
+{
+    PHYSICAL_ADDRESS Address;
+    ULONG64 Base;
+    ULONG Size, Pages;
+    PVOID Fdt;
+    LONG Node;
+    BOOLEAN Found = FALSE;
+
+    if (!FdtFindLoaderBlob(LoaderBlock, &Address, &Size))
+        return FALSE;
+
+    Pages = BYTES_TO_PAGES(Size);
+    Fdt = KdMapPhysicalMemory64(Address, Pages);
+    if (!Fdt)
+        return FALSE;
+
+    if (FdtCheckHeader(Fdt) && (FdtTotalSize(Fdt) <= Size))
+    {
+        Node = FdtStdoutNode(Fdt);
+        if ((Node >= 0) && FdtGetReg(Fdt, Node, 0, &Base, NULL))
+        {
+            Found = TRUE;
+            if (FdtIsCompatible(Fdt, Node, "arm,pl011"))
+                *Subtype = DBG2_SERIAL_PL011;
+            else if (FdtIsCompatible(Fdt, Node, "arm,sbsa-uart"))
+                *Subtype = DBG2_SERIAL_SBSA;
+            else if ((FdtIsCompatible(Fdt, Node, "ns16550a") || FdtIsCompatible(Fdt, Node, "ns16550")) &&
+                     KdpFdtIs8BitUart(Fdt, Node))
+                *Subtype = DBG2_SERIAL_16550;
+            else
+                Found = FALSE;
+
+            PhysicalAddress->QuadPart = Base;
+        }
+    }
+
+    KdUnmapVirtualAddress(Fdt, Pages);
+    return Found;
+}
+
 /**
  * @brief Maps and starts the debug port.
  *
- * There are no fixed ports on ARM64. Without an address on the command line
- * or a usable DBG2 entry, no device memory is touched.
+ * There are no fixed ports on ARM64. Without an address on the command line,
+ * a usable DBG2 entry or a device tree console, no device memory is touched.
  */
 static
 NTSTATUS
@@ -234,7 +299,8 @@ KdpFirmwarePortInitialize(
     /* A port given on the command line is a 16550 */
     if (PortAddress)
         PhysicalAddress.QuadPart = (ULONG_PTR)PortAddress;
-    else if (!KdpFindDbg2Port(LoaderBlock, &PhysicalAddress, &Subtype))
+    else if (!KdpFindDbg2Port(LoaderBlock, &PhysicalAddress, &Subtype) &&
+             !KdpFindFdtPort(LoaderBlock, &PhysicalAddress, &Subtype))
         return STATUS_NOT_FOUND;
 
     Base = KdMapPhysicalMemory64(PhysicalAddress, 1);

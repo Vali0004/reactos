@@ -16,7 +16,7 @@ add_pch(kdcom kddll.h SOURCE)
 set_module_type(kdcom kerneldll ENTRYPOINT 0)
 set_subsystem(kdcom native)
 add_importlibs(kdcom ntoskrnl hal)
-target_link_libraries(kdcom cportlib strtol)
+target_link_libraries(kdcom cportlib fdtlib strtol)
 add_dependencies(kdcom psdk bugcodes)
 if(GDB) ## See PR #5187
     set(KDCOM_NAME_ON_CD kdser.dll)
