@@ -623,6 +623,7 @@ add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WIT
 # disable exceptions unless said so
 if(USE_CLANG_CL AND ARCH STREQUAL "arm")
     # LLVM cannot emit C++ exception handling for 32-bit ARM Windows
+    set(NO_CXX_EXCEPTIONS TRUE)
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/EHs-c->"
                         "$<$<COMPILE_LANGUAGE:CXX>:/D_HAS_EXCEPTIONS=0>"
                         "$<$<COMPILE_LANGUAGE:CXX>:/D_STLP_NO_EXCEPTIONS>"
