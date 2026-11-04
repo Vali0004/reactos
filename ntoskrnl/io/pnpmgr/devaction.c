@@ -980,6 +980,13 @@ IopQueryHardwareIds(PDEVICE_NODE DeviceNode,
                                &IoStatusBlock,
                                IRP_MN_QUERY_ID,
                                &Stack);
+    if (NT_SUCCESS(Status) && !IoStatusBlock.Information)
+    {
+        /* a bus driver bug, it answered without an ID list */
+        DPRINT1("No HardwareIDs from %wZ\n", &DeviceNode->InstancePath);
+        Status = STATUS_NOT_SUPPORTED;
+    }
+
     if (NT_SUCCESS(Status))
     {
         IsValidID = IopValidateID((PWCHAR)IoStatusBlock.Information, BusQueryHardwareIDs);

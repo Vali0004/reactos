@@ -1186,6 +1186,12 @@ MmInitializeHandBuiltProcess(IN PEPROCESS Process,
     /* Share the directory base with the idle process */
     DirectoryTableBase[0] = PsGetCurrentProcess()->Pcb.DirectoryTableBase[0];
     DirectoryTableBase[1] = PsGetCurrentProcess()->Pcb.DirectoryTableBase[1];
+#ifdef _M_ARM
+    /* the MMU walks the first level table, not the directory, it is shared too */
+    Process->Pcb.FirstLevelTable = PsGetCurrentProcess()->Pcb.FirstLevelTable;
+    Process->Pcb.FirstLevelTableVa = PsGetCurrentProcess()->Pcb.FirstLevelTableVa;
+    Process->Pcb.FirstLevelTableMapVa = PsGetCurrentProcess()->Pcb.FirstLevelTableMapVa;
+#endif
 
     /* Initialize the Addresss Space */
     KeInitializeGuardedMutex(&Process->AddressCreationLock);

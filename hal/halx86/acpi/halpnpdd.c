@@ -517,7 +517,7 @@ HalpQueryIdPdo(IN PDEVICE_OBJECT DeviceObject,
         case BusQueryHardwareIDs:
 
             /* What kind of PDO is this? */
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
             /* Without ACPI tables the HAL's child is the device tree bus driver */
             if ((PdoType == AcpiPdo) && HalpDeviceTreePlatform)
             {

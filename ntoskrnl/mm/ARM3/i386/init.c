@@ -289,6 +289,11 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     StartPde = MiAddressToPde(0);
     EndPde = MiAddressToPde(KSEG0_BASE);
     RtlZeroMemory(StartPde, (EndPde - StartPde) * sizeof(MMPTE));
+#ifdef _M_ARM
+    /* the loader's identity mappings live on in the first level table */
+    for (PointerPte = StartPde; PointerPte < EndPde; PointerPte++)
+        MiArmSyncL1(PointerPte);
+#endif
 
     /* Compute non paged pool limits and size */
     MiComputeNonPagedPoolVa(MiNumberOfFreePages);

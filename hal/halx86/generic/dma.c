@@ -88,7 +88,7 @@ static BOOLEAN HalpEisaDma;
 static PADAPTER_OBJECT HalpMasterAdapter;
 #endif
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
 /* Normal memory without caching, device memory faults on unaligned and zeroing accesses */
 #define HALP_DMA_UNCACHED       MmWriteCombined
 
@@ -753,7 +753,7 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
     MaximumLength = DeviceDescription->MaximumLength & MAXLONG;
     if ((DeviceDescription->ScatterGather) &&
         ((DeviceDescription->InterfaceType == Eisa) ||
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
          /* device tree bus masters, there is no ISA memory for bounce buffers */
          ((DeviceDescription->InterfaceType == Internal) && (DeviceDescription->Master)) ||
 #endif
@@ -978,7 +978,7 @@ HalAllocateCommonBuffer(IN PADAPTER_OBJECT AdapterObject,
         BoundryAddressMultiple.LowPart = 0x10000;
     }
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     /* Drivers never flush common buffers, a master that does not snoop needs them uncached */
     if (HalpDmaNotCoherent())
         CacheEnabled = FALSE;
@@ -1014,7 +1014,7 @@ HalFreeCommonBuffer(IN PADAPTER_OBJECT AdapterObject,
                     IN PVOID VirtualAddress,
                     IN BOOLEAN CacheEnabled)
 {
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     if (HalpDmaNotCoherent())
         CacheEnabled = FALSE;
 #endif
@@ -2010,7 +2010,7 @@ IoFlushAdapterBuffers(IN PADAPTER_OBJECT AdapterObject,
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
     ASSERT(AdapterObject);
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     /* Drop lines the CPU may have pulled in while the device wrote memory */
     if (!WriteToDevice)
         HalpSweepDmaBuffer(Mdl, CurrentVa, Length);
@@ -2134,7 +2134,7 @@ IoMapTransfer(IN PADAPTER_OBJECT AdapterObject,
     DMA_MODE AdapterMode;
     KIRQL OldIrql;
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     /* Write back what the device reads and drop lines over what it writes */
     HalpSweepDmaBuffer(Mdl, CurrentVa, *Length);
 #endif

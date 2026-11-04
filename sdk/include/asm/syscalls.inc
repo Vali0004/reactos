@@ -19,9 +19,9 @@ ZwFuncEndName SETS "$ZwFuncName":CC:"_end"
 	EXPORT $ZwFuncName [FUNC]
 $ZwFuncName
 	ROUT
+    /* an svc taken in SVC mode would lose lr, kernel callers branch in */
     mov r12, #SyscallId
-    svc #1
-    bx lr
+    b KiZwSystemService
 $ZwFuncEndName
     MEND
 
@@ -71,14 +71,14 @@ Zw\Name:
     .set SyscallId, SyscallId + 1
 .endm
 
+/* an svc taken in SVC mode would lose lr, kernel callers branch in */
 .macro STUB_K Name
     .global Zw\Name
     .p2align 2
     .thumb_func
 Zw\Name:
     movw r12, #SyscallId
-    svc #1
-    bx lr
+    b.w KiZwSystemService
     .set SyscallId, SyscallId + 1
 .endm
 

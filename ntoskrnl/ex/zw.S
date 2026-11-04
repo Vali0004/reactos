@@ -5,9 +5,7 @@
 
     TEXTAREA
 
-#ifdef _M_ARM64
     IMPORT KiZwSystemService
-#endif
 
 #define SVC_(name, argcount) STUB_K name
 

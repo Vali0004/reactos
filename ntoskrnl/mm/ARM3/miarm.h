@@ -1049,6 +1049,13 @@ MI_IS_PHYSICAL_ADDRESS(IN PVOID Address)
     return (MI_IS_PAGE_LARGE(PointerPde) && (PointerPde->u.Hard.Valid));
 }
 
+#ifdef _M_ARM
+/* x86 code writes PDEs through the PTE helpers, on arm those must reach the first level table too */
+#define MI_ARM_SYNC_IF_PDE(PointerPte) \
+    do { if (((ULONG_PTR)(PointerPte) >= PDE_BASE) && ((ULONG_PTR)(PointerPte) <= PDE_TOP)) \
+             MiArmSyncL1((PMMPDE)(PointerPte)); } while (0)
+#endif
+
 //
 // Writes a valid PTE
 //
@@ -1072,6 +1079,7 @@ MI_WRITE_VALID_PTE(IN PMMPTE PointerPte,
 #elif defined(_M_ARM)
     __dsb(_ARM_BARRIER_ISHST);
     __isb(_ARM_BARRIER_SY);
+    MI_ARM_SYNC_IF_PDE(PointerPte);
 #endif
 }
 
@@ -1088,6 +1096,9 @@ MI_UPDATE_VALID_PTE(IN PMMPTE PointerPte,
     ASSERT(TempPte.u.Hard.Valid == 1);
     ASSERT(PointerPte->u.Hard.PageFrameNumber == TempPte.u.Hard.PageFrameNumber);
     *PointerPte = TempPte;
+#ifdef _M_ARM
+    MI_ARM_SYNC_IF_PDE(PointerPte);
+#endif
 }
 
 //
@@ -1101,6 +1112,9 @@ MI_WRITE_INVALID_PTE(IN PMMPTE PointerPte,
     /* Write the invalid PTE */
     ASSERT(InvalidPte.u.Hard.Valid == 0);
     *PointerPte = InvalidPte;
+#ifdef _M_ARM
+    MI_ARM_SYNC_IF_PDE(PointerPte);
+#endif
 }
 
 //
@@ -1113,6 +1127,9 @@ MI_ERASE_PTE(IN PMMPTE PointerPte)
     /* Zero out the PTE */
     ASSERT(PointerPte->u.Long != 0);
     PointerPte->u.Long = 0;
+#ifdef _M_ARM
+    MI_ARM_SYNC_IF_PDE(PointerPte);
+#endif
 }
 
 //

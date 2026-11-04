@@ -184,6 +184,39 @@ LABEL(KiArmCompleteStore)
     b KiArmTrapExit
     NESTED_END KiSoftwareInterruptException
 
+/*
+ * The kernel Zw stubs branch here with the service number in r12. An svc in
+ * SVC mode would overwrite lr, so this builds the frame the vector builds,
+ * returning to the caller in Thumb state.
+ */
+    NESTED_ENTRY KiZwSystemService
+    /* TrPc and TrCpsr, where srsdb would put them, r0 is kept on top */
+    sub sp, sp, #8
+    push {r0}
+    mrs r0, cpsr
+    orr r0, r0, #0x20 // T, mrs reads it as 0
+    str r0, [sp, #8]
+    bic r0, lr, #1
+    str r0, [sp, #4]
+    pop {r0}
+    cpsid i
+    sub sp, sp, #(KI_TRAP_STACK_SIZE - 8)
+    str r0, [sp, #(KEXCEPTION_FRAME_LENGTH + TrR0)]
+    str r1, [sp, #(KEXCEPTION_FRAME_LENGTH + TrR1)]
+    str r2, [sp, #(KEXCEPTION_FRAME_LENGTH + TrR2)]
+    str r3, [sp, #(KEXCEPTION_FRAME_LENGTH + TrR3)]
+    str r12, [sp, #(KEXCEPTION_FRAME_LENGTH + TrR12)]
+    str lr, [sp, #(KEXCEPTION_FRAME_LENGTH + TrLr)]
+    movs r0, #KI_FAULT_NONE
+    bl KiArmCompleteTrapFrame
+    add r0, sp, #KEXCEPTION_FRAME_LENGTH
+    mov r1, sp
+    bl KiArmSystemServiceTrap
+    sub r0, r0, #KEXCEPTION_FRAME_LENGTH
+    mov sp, r0
+    b KiArmTrapExit
+    NESTED_END KiZwSystemService
+
     NESTED_ENTRY KiPrefetchAbortException
     KI_TRAP_ENTRY 4
     movs r0, #KI_FAULT_INSTRUCTION

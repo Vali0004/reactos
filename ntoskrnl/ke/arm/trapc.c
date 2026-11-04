@@ -252,7 +252,10 @@ KiArmUndefinedTrap(
     BOOLEAN Thumb;
 
     ASSERT(TrapFrame->Reserved == 0xBADB0D00);
-    KiArmRestoreInterrupts(TrapFrame);
+
+    /* the debugger runs with interrupts off as on x86, kernel traps restore them per case */
+    if (KiUserTrap(TrapFrame))
+        KiArmRestoreInterrupts(TrapFrame);
 
     /* lr is the next instruction, 2 past a 16-bit Thumb one */
     Thumb = (TrapFrame->Cpsr & CPSRF_T) != 0;
@@ -278,8 +281,17 @@ KiArmUndefinedTrap(
         /* A 32-bit Thumb instruction started 2 bytes earlier */
         if (Thumb)
             TrapFrame->Pc -= 2;
+        if (!KiUserTrap(TrapFrame))
+            KiArmRestoreInterrupts(TrapFrame);
         KiArmDispatchTrapException(TrapFrame, ExceptionFrame, STATUS_ILLEGAL_INSTRUCTION, 0, 0, 0, 0);
         return KiArmTrapReturn(TrapFrame);
+    }
+
+    if (!KiUserTrap(TrapFrame) &&
+        ((Instruction & 0xFF) != KI_UDF_BREAKPOINT) &&
+        ((Instruction & 0xFF) != KI_UDF_DEBUG_SERVICE))
+    {
+        KiArmRestoreInterrupts(TrapFrame);
     }
 
     switch (Instruction & 0xFF)

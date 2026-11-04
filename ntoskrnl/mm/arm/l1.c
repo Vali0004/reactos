@@ -35,8 +35,21 @@ MiArmSyncL1(
     ULONG PdeIndex, Entry, i;
     PULONG L1;
 
+    /*
+     * MmSystemPagePtes maps the system directory a second time, a store there
+     * lands in the live directory too when it is the current one
+     */
+    if (((ULONG_PTR)PointerPde < PDE_BASE) || ((ULONG_PTR)PointerPde > PDE_TOP))
+    {
+        PMMPDE LivePde = (PMMPDE)PDE_BASE +
+                         (((ULONG_PTR)PointerPde & (SYSTEM_PD_SIZE - 1)) / sizeof(MMPDE));
+
+        if (LivePde->u.Long != PointerPde->u.Long)
+            return;
+        PointerPde = LivePde;
+    }
+
     PdeIndex = (ULONG)(PointerPde - (PMMPDE)PDE_BASE);
-    ASSERT(PdeIndex < PDE_PER_SYSTEM);
 
     L1 = MI_ARM_L1_TABLE + (PdeIndex * (PDE_MAPPED_VA / _1MB));
 
