@@ -50,6 +50,10 @@ HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#CC_0C0310","Cl
 
 HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#CC_0C0320","Service",0x00000000,"usbehci"
 HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#CC_0C0320","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
+HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\*PNP0D20","Service",0x00000000,"usbehci"
+HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\*PNP0D20","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
+HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\DTB#GENERIC-OHCI","Service",0x00000000,"usbohci"
+HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\DTB#GENERIC-OHCI","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
 
 HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#CC_0C0330","Service",0x00000000,"usbxhci"
 HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#CC_0C0330","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
