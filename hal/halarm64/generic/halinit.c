@@ -49,7 +49,9 @@ HalInitializeProcessor(
     if (ProcessorNumber == 0)
     {
         HalpAcpiInitialize(LoaderBlock);
-        HalpGicInitializeDistributor();
+        HalpExtInitialize(LoaderBlock);
+        if (!HalpExtInterruptInitialize())
+            HalpGicInitializeDistributor();
 
         /* The debugger looks for its port right after this */
         KdGetAcpiTablePhase0 = HalAcpiGetTable;
@@ -57,7 +59,10 @@ HalInitializeProcessor(
         KdUnmapVirtualAddress = HalpUnmapVirtualAddress;
     }
 
-    HalpGicInitializeCpu(ProcessorNumber);
+    if (HalpExtInterrupts)
+        HalpExtInterruptInitializeCpu(ProcessorNumber);
+    else
+        HalpGicInitializeCpu(ProcessorNumber);
 
     /* Match the priority mask to the IRQL the kernel runs at */
     HalpSetPriorityMask(KeGetPcr()->CurrentIrql);

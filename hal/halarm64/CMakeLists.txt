@@ -14,6 +14,9 @@ list(APPEND SOURCE
     generic/acpi.c
     generic/dtb.c
     generic/gic.c
+    generic/extintr.c
+    generic/exttimer.c
+    generic/halext.c
     generic/halinit.c
     generic/halpnp.c
     generic/irql.c

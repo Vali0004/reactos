@@ -28,6 +28,9 @@ FORCEINLINE
 ULONG64
 HalpReadCounter(VOID)
 {
+    if (HalpExtTimer)
+        return HalpExtReadCounter();
+
     __isb(_ARM64_BARRIER_SY);
     return KeArm64ReadRegister(ARM64_CNTVCT);
 }
@@ -45,6 +48,12 @@ VOID
 NTAPI
 HalpInitializeClock(VOID)
 {
+    if (HalpExtTimerInitialize(&HalpTimerFrequency))
+    {
+        KeSetTimeIncrement(HALP_CLOCK_INCREMENT, HALP_CLOCK_INCREMENT);
+        return;
+    }
+
     HalpTimerFrequency = KeArm64ReadRegister(ARM64_CNTFRQ_EL0) & 0xFFFFFFFF;
     if (!HalpTimerFrequency)
         KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x7173, 0, 0, 0);
@@ -84,6 +93,12 @@ VOID
 NTAPI
 HalpStartClockInterrupt(VOID)
 {
+    if (HalpExtTimer)
+    {
+        HalpExtStartClockInterrupt();
+        return;
+    }
+
     KeInitializeInterrupt(&HalpClockInterrupt,
                           HalpClockInterruptHandler,
                           NULL,

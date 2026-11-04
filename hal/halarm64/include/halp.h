@@ -302,6 +302,32 @@ NTAPI
 HalpSetPriorityMask(
     _In_ KIRQL Irql);
 
+/* halext.c */
+VOID
+NTAPI
+HalpExtInitialize(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+/* extintr.c */
+extern BOOLEAN HalpExtInterrupts;
+
+BOOLEAN NTAPI HalpExtInterruptInitialize(VOID);
+VOID NTAPI HalpExtInterruptInitializeCpu(_In_ ULONG ProcessorNumber);
+VOID NTAPI HalpExtSetPriorityMask(_In_ KIRQL Irql);
+ULONG NTAPI HalpExtAcknowledge(VOID);
+VOID NTAPI HalpExtEndOfInterrupt(VOID);
+VOID NTAPI HalpExtEndDeviceInterrupt(VOID);
+VOID NTAPI HalpExtRequestSoftwareInterrupt(_In_ KIRQL Irql, _In_ KAFFINITY Targets);
+BOOLEAN NTAPI HalpExtEnableInterrupt(_In_ ULONG Vector, _In_ KIRQL Irql, _In_ KINTERRUPT_MODE Mode);
+VOID NTAPI HalpExtDisableInterrupt(_In_ ULONG Vector);
+
+/* exttimer.c */
+extern BOOLEAN HalpExtTimer;
+
+BOOLEAN NTAPI HalpExtTimerInitialize(_Out_ PULONG64 Frequency);
+ULONG64 NTAPI HalpExtReadCounter(VOID);
+VOID NTAPI HalpExtStartClockInterrupt(VOID);
+
 /* memory.c */
 PVOID
 NTAPI

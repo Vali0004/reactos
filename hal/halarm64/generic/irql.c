@@ -25,7 +25,10 @@ NTAPI
 HalpSetPriorityMask(
     _In_ KIRQL Irql)
 {
-    HalpGicSetPriorityMask(HalpIrqlToPriority(Irql));
+    if (HalpExtInterrupts)
+        HalpExtSetPriorityMask(Irql);
+    else
+        HalpGicSetPriorityMask(HalpIrqlToPriority(Irql));
 }
 
 /* Updates the PCR and the mask together so an interrupt never sees them disagree */
@@ -98,7 +101,10 @@ FASTCALL
 HalRequestSoftwareInterrupt(
     _In_ KIRQL Irql)
 {
-    HalpGicSendSgi(Irql, AFFINITY_MASK(KeGetCurrentProcessorNumber()));
+    if (HalpExtInterrupts)
+        HalpExtRequestSoftwareInterrupt(Irql, AFFINITY_MASK(KeGetCurrentProcessorNumber()));
+    else
+        HalpGicSendSgi(Irql, AFFINITY_MASK(KeGetCurrentProcessorNumber()));
 }
 
 VOID
@@ -115,7 +121,10 @@ NTAPI
 HalRequestIpi(
     _In_ KAFFINITY TargetProcessors)
 {
-    HalpGicSendSgi(IPI_LEVEL, TargetProcessors);
+    if (HalpExtInterrupts)
+        HalpExtRequestSoftwareInterrupt(IPI_LEVEL, TargetProcessors);
+    else
+        HalpGicSendSgi(IPI_LEVEL, TargetProcessors);
 }
 
 /**
@@ -127,6 +136,9 @@ ULONG
 FASTCALL
 HalGetInterruptSource(VOID)
 {
+    if (HalpExtInterrupts)
+        return HalpExtAcknowledge();
+
     return HalpGicAcknowledge();
 }
 
@@ -154,6 +166,23 @@ HalBeginSystemInterrupt(
         HalpSetPriorityMask(Irql);
     }
 
+    /* software interrupts may switch threads before they end, so they end here
+     * device lines end after their isr, the irql keeps them quiet meanwhile */
+    if (HalpExtInterrupts)
+    {
+        BOOLEAN Software = (Vector == APC_LEVEL) || (Vector == DISPATCH_LEVEL) || (Vector == IPI_LEVEL);
+
+        if (Software || (Irql <= CurrentIrql))
+            HalpExtEndOfInterrupt();
+
+        if (Irql > CurrentIrql)
+            return TRUE;
+
+        if (Software)
+            HalpExtRequestSoftwareInterrupt((KIRQL)Vector, AFFINITY_MASK(KeGetCurrentProcessorNumber()));
+        return FALSE;
+    }
+
     HalpGicEndOfInterrupt(Vector);
 
     if (Irql > CurrentIrql)
@@ -174,6 +203,9 @@ HalEndSystemInterrupt(
 {
     UNREFERENCED_PARAMETER(TrapFrame);
 
+    if (HalpExtInterrupts)
+        HalpExtEndDeviceInterrupt();
+
     KeGetPcr()->CurrentIrql = OldIrql;
     HalpSetPriorityMask(OldIrql);
 }
@@ -185,6 +217,9 @@ HalEnableSystemInterrupt(
     _In_ KIRQL Irql,
     _In_ KINTERRUPT_MODE InterruptMode)
 {
+    if (HalpExtInterrupts)
+        return HalpExtEnableInterrupt(Vector, Irql, InterruptMode);
+
     if ((Vector < GIC_SGI_COUNT) || (Vector > GIC_MAX_INTID))
         return FALSE;
 
@@ -199,6 +234,12 @@ HalDisableSystemInterrupt(
     _In_ KIRQL Irql)
 {
     UNREFERENCED_PARAMETER(Irql);
+
+    if (HalpExtInterrupts)
+    {
+        HalpExtDisableInterrupt(Vector);
+        return;
+    }
 
     if ((Vector < GIC_SGI_COUNT) || (Vector > GIC_MAX_INTID))
         return;
