@@ -39,6 +39,8 @@ HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#VEN_1033&DEV_0
 
 HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\*PNP0C08","Service",0x00000000,"acpi"
 HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\*PNP0C08","ClassGUID",0x00000000,"{4D36E97D-E325-11CE-BFC1-08002BE10318}"
+HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\*DTB0000","Service",0x00000000,"dtb"
+HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\*DTB0000","ClassGUID",0x00000000,"{4D36E97D-E325-11CE-BFC1-08002BE10318}"
 
 HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#CC_0C0300","Service",0x00000000,"usbuhci"
 HKLM,"SYSTEM\CurrentControlSet\Control\CriticalDeviceDatabase\PCI#CC_0C0300","ClassGUID",0x00000000,"{36FC9E60-C465-11CF-8056-444553540000}"
@@ -2025,6 +2027,14 @@ HKLM,"SYSTEM\CurrentControlSet\Services\MountMgr","ImagePath",0x00020000,"system
 HKLM,"SYSTEM\CurrentControlSet\Services\MountMgr","Start",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\MountMgr","Tag",0x00010001,0x00000008
 HKLM,"SYSTEM\CurrentControlSet\Services\MountMgr","Type",0x00010001,0x00000001
+
+; Device tree bus driver, the HAL reports it instead of ACPI without ACPI tables
+HKLM,"SYSTEM\CurrentControlSet\Services\dtb","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\dtb","Group",0x00000000,"Boot Bus Extender"
+HKLM,"SYSTEM\CurrentControlSet\Services\dtb","ImagePath",0x00020000,"system32\drivers\dtb.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\dtb","Start",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\dtb","Tag",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\dtb","Type",0x00010001,0x00000001
 
 ; ACPI driver
 HKLM,"SYSTEM\CurrentControlSet\Services\acpi","ErrorControl",0x00010001,0x00000001

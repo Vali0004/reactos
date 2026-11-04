@@ -166,6 +166,7 @@ acpi.sys     = 1,,,,,,x,4,,,,1,4
 *PNP0A03 = pci
 *PNP0A08 = pci
 *PNP0C08 = acpi
+*DTB0000 = dtb
 PCI\CC_0601 = isapnp
 PCI\CC_0604 = pci
 PCI\VEN_104B&CC_0100 = buslogic
@@ -200,6 +201,7 @@ ROOT\SWENUM = swenum
 
 [BootBusExtenders.Load]
 acpi = acpi.sys
+dtb = dtb.sys
 pci = pci.sys
 isapnp = isapnp.sys
 
