@@ -102,7 +102,8 @@
 
 #endif
 
-#ifndef _WIN64
+/* the x86 KTHREAD layout the i386 asm relies on */
+#ifdef _M_IX86
 C_ASSERT(FIELD_OFFSET(KUSER_SHARED_DATA, SystemCall) == 0x300);
 
 C_ASSERT(FIELD_OFFSET(KTHREAD, InitialStack) == KTHREAD_INITIAL_STACK);
