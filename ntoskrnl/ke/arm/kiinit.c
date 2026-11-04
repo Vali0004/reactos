@@ -12,12 +12,8 @@
 #define NDEBUG
 #include <debug.h>
 
-VOID
-NTAPI
-KdPortPutByteEx(
-    PCPPORT PortInformation,
-    UCHAR ByteToSend
-);
+/* The loader's console print, valid while its identity mapping is, as on ARM64 */
+ULONG (*FrLdrDbgPrint)(const char *Format, ...);
 
 /* GLOBALS ********************************************************************/
 
@@ -439,16 +435,10 @@ DbgPrintEarly(const char *fmt, ...)
     i = vsprintf(Buffer, fmt, args);
     va_end(args);
 
-    /* Output the message */
-    while (*String != 0)
-    {
-        if (*String == '\n')
-        {
-            KdPortPutByteEx(NULL, '\r');
-        }
-        KdPortPutByteEx(NULL, *String);
-        String++;
-    }
+    /* Output the message through the loader until the kernel debugger is up */
+    UNREFERENCED_PARAMETER(i);
+    if (FrLdrDbgPrint)
+        FrLdrDbgPrint("%s", String);
 
     return STATUS_SUCCESS;
 }

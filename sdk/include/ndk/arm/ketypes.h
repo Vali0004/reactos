@@ -1030,6 +1030,12 @@ typedef struct _KPRCB
     CHAR VendorString[13];
 #endif
 
+    /* ReactOS only, the counters and the HT master generic code reads */
+    KAFFINITY MultiThreadProcessorSet;
+    struct _KPRCB *MultiThreadSetMaster;
+    ULONG KeFirstLevelTbFills;
+    ULONG KeSecondLevelTbFills;
+
 } KPRCB, *PKPRCB;
 C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorState) == 0x20);
 C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorModel) == 0x3C0);

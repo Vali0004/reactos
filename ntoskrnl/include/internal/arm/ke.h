@@ -4,6 +4,20 @@
 
 #define KiServiceExit2 KiExceptionExit
 
+/* the virtual count of the ARMv7 generic timer */
+FORCEINLINE
+ULONG64
+KxQueryProcessorCycleTime(VOID)
+{
+    return _MoveFromCoprocessor64(15, 1, 14);
+}
+
+DECLSPEC_NORETURN
+VOID
+KiExceptionExit(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame);
+
 #define SYNCH_LEVEL DISPATCH_LEVEL
 #define PCR                     ((KPCR * const)KIP0PCRADDRESS)
 
