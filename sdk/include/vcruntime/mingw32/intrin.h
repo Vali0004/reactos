@@ -91,6 +91,9 @@
 #include "intrin_ppc.h"
 #elif defined(_MIPS_)
 #include "intrin_mips.h"
+#elif defined(_M_ARM) && defined(_MSC_VER)
+/* clang-cl has most Visual C++ ARM intrinsics as builtins */
+#include "intrin_arm_clang.h"
 #elif defined(_M_ARM)
 #include "intrin_arm.h"
 #elif defined(_M_ARM64) || defined(__aarch64__)

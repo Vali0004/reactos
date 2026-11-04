@@ -982,7 +982,9 @@ int _ReadStatusReg(int);
 int _SubSatInt(int, int);
 void _WriteStatusReg(int, int, int);
 void __emit(unsigned __int32);
+#if !defined(__clang__) /* builtins with their own prototypes */
 __int64 __ldrexd(__int64 volatile *);
+#endif
 void __cdecl __prefetch(const void *);
 unsigned __int64 __rdpmccntr64(void);
 void __sev(void);
