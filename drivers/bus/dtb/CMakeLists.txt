@@ -2,6 +2,8 @@
 list(APPEND SOURCE
     dtb.c
     pcihost.c
+    platdev.c
+    sun50i.c
     dtb.h)
 
 add_library(dtb MODULE ${SOURCE} dtb.rc)
