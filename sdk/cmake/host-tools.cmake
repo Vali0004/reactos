@@ -54,7 +54,7 @@ function(setup_host_tools)
     if(ARCH STREQUAL HOST_ARCH)
         set(HOST_TOOLS_CMAKE_COMMAND "${CMAKE_COMMAND}")
         message("Not cross-compiling, no special host-tools cmake command")
-    elseif(MSVC)
+    elseif(MSVC AND CMAKE_HOST_WIN32)
         message("Compiling on ${HOST_ARCH} for ${ARCH} (MSVC)")
         set(HOST_TOOLS_CMAKE_COMMAND "${REACTOS_BINARY_DIR}/host-tools/cmake_shim.cmd")
         if(MSVC_VERSION EQUAL 1900)
@@ -80,7 +80,7 @@ function(setup_host_tools)
     endif()
 
     # CMake might choose clang if it finds it in the PATH. Always prefer cl for host tools
-    if (MSVC)
+    if (MSVC AND CMAKE_HOST_WIN32)
         list(APPEND CMAKE_HOST_TOOLS_EXTRA_ARGS
             -DCMAKE_C_COMPILER=cl
             -DCMAKE_CXX_COMPILER=cl)
