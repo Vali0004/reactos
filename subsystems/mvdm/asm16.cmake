@@ -4,7 +4,7 @@
 # support because we are going to compile ASM files for a fixed target (16-bit x86)
 # that is different from the main target.
 
-if(NOT MSVC OR MSVC_ARM64_GAS)
+if(NOT MSVC OR MSVC_ARM64_GAS OR MSVC_ARM_GAS)
 ###
 ### For GCC, and for clang-cl off Windows where there is no 16-bit ml.exe
 ###
@@ -13,6 +13,10 @@ if(MSVC_ARM64_GAS)
     # LLVM writes no 16-bit COFF relocations, so ELF goes through ld.lld instead of obj2bin
     set(_asm16_compiler ${CMAKE_C_COMPILER} --driver-mode=gcc --target=i686-unknown-elf)
     set(_asm16_arch_defines -U_M_ARM64 -U_ARM64_ -U__arm64__ -U__aarch64__ -U_WIN64 -D_M_IX86 -D_X86_)
+elseif(MSVC_ARM_GAS)
+    # the same for 32-bit ARM
+    set(_asm16_compiler ${CMAKE_C_COMPILER} --driver-mode=gcc --target=i686-unknown-elf)
+    set(_asm16_arch_defines -U_M_ARM -U_ARM_ -U__arm__ -U__thumb__ -U__thumb2__ -D_M_IX86 -D_X86_)
 else()
     set(_asm16_compiler ${CMAKE_ASM_COMPILER})
 endif()
@@ -56,7 +60,7 @@ function(add_asm16_bin _target _binary_file _base_address)
         COMMAND ${_asm16_compiler} -x assembler-with-cpp -o ${_object_file} -I${REACTOS_SOURCE_DIR}/sdk/include/asm -I${REACTOS_BINARY_DIR}/sdk/include/asm ${_directory_includes} ${_source_file_defines} ${_directory_defines} ${_asm16_arch_defines} -D__ASM__ -c ${_concatenated_asm_file}
         DEPENDS ${_concatenated_asm_file})
 
-    if(MSVC_ARM64_GAS)
+    if(MSVC_ARM64_GAS OR MSVC_ARM_GAS)
         add_custom_command(
             OUTPUT ${_binary_file}
             COMMAND ld.lld -m elf_i386 --oformat=binary --image-base=0 -Ttext=${_base_address} -e 0 -o ${_binary_file} ${_object_file}
