@@ -17,6 +17,8 @@
  * https://github.com/jmonesti/qemu-4.1.1/blob/55fb6a81039a62174c2763759324c43a67d752a1/roms/ipxe/src/arch/arm32/libgcc/lldivmod.S
  */
 
+#include <intrin.h>
+
 #ifdef _USE_64_BITS_
 typedef unsigned long long UINT3264;
 typedef long long INT3264;
@@ -25,18 +27,24 @@ typedef struct
     unsigned long long quotient; /* to be returned in R0,R1 */
     unsigned long long modulus;  /* to be returned in R2,R3 */
 } RETURN_TYPE;
-#define _CountLeadingZeros _CountLeadingZeros64
+#define __rt_clz _CountLeadingZeros64
 #else
 typedef unsigned int UINT3264;
 typedef int INT3264;
 typedef unsigned long long RETURN_TYPE; /* to be returned in R0,R1 */
+#define __rt_clz _CountLeadingZeros
 #endif
 
 __forceinline
 void
 __brkdiv0(void)
 {
+#ifdef __clang__
+    /* the divide by zero trap, clang has no __emit */
+    __asm__ __volatile__(".inst.n 0xDEF9");
+#else
     __emit(0xDEF9);
+#endif
 }
 
 typedef union _ARM_DIVRESULT
@@ -95,8 +103,8 @@ __rt_div_worker(
     }
 
     /* Get the difference in count of leading zeros between dividend and divisor */
-    shift = _CountLeadingZeros(divisor);
-    shift -= _CountLeadingZeros(dividend);
+    shift = __rt_clz(divisor);
+    shift -= __rt_clz(dividend);
 
     /* Shift the divisor to the left, so that it's highest bit is the same
        as the highest bit of the dividend */
