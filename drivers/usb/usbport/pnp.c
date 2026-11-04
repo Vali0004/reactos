@@ -527,36 +527,50 @@ USBPORT_StartDevice(IN PDEVICE_OBJECT FdoDevice,
     FdoExtension = FdoDevice->DeviceExtension;
     Packet = &FdoExtension->MiniPortInterface->Packet;
 
-    Status = USBPORT_QueryPciBusInterface(FdoDevice);
-    if (!NT_SUCCESS(Status))
-        goto ExitWithError;
-
-    BytesRead = (*FdoExtension->BusInterface.GetBusData)(FdoExtension->BusInterface.Context,
-                                                         PCI_WHICHSPACE_CONFIG,
-                                                         &PciConfig,
-                                                         0,
-                                                         PCI_COMMON_HDR_LENGTH);
-
-    if (BytesRead != PCI_COMMON_HDR_LENGTH)
-    {
-        DPRINT1("USBPORT_StartDevice: Failed to get pci config information!\n");
-        goto ExitWithError;
-    }
-
-    FdoExtension->VendorID = PciConfig.VendorID;
-    FdoExtension->DeviceID = PciConfig.DeviceID;
-    FdoExtension->RevisionID = PciConfig.RevisionID;
-    FdoExtension->ProgIf = PciConfig.ProgIf;
-    FdoExtension->SubClass = PciConfig.SubClass;
-    FdoExtension->BaseClass = PciConfig.BaseClass;
-
     RtlZeroMemory(&DeviceDescription, sizeof(DeviceDescription));
+    DeviceDescription.InterfaceType = PCIBus;
+
+    Status = USBPORT_QueryPciBusInterface(FdoDevice);
+    if (NT_SUCCESS(Status))
+    {
+        BytesRead = (*FdoExtension->BusInterface.GetBusData)(FdoExtension->BusInterface.Context,
+                                                             PCI_WHICHSPACE_CONFIG,
+                                                             &PciConfig,
+                                                             0,
+                                                             PCI_COMMON_HDR_LENGTH);
+
+        if (BytesRead != PCI_COMMON_HDR_LENGTH)
+        {
+            DPRINT1("USBPORT_StartDevice: Failed to get pci config information!\n");
+            goto ExitWithError;
+        }
+
+        FdoExtension->VendorID = PciConfig.VendorID;
+        FdoExtension->DeviceID = PciConfig.DeviceID;
+        FdoExtension->RevisionID = PciConfig.RevisionID;
+        FdoExtension->ProgIf = PciConfig.ProgIf;
+        FdoExtension->SubClass = PciConfig.SubClass;
+        FdoExtension->BaseClass = PciConfig.BaseClass;
+    }
+    else
+    {
+        /* A controller on a platform bus has no PCI header, the miniport says what it is */
+        DPRINT1("USBPORT_StartDevice: no PCI bus interface, starting as a platform controller\n");
+        RtlZeroMemory(&FdoExtension->BusInterface, sizeof(FdoExtension->BusInterface));
+        FdoExtension->VendorID = 0;
+        FdoExtension->DeviceID = 0;
+        FdoExtension->RevisionID = 0;
+        FdoExtension->BaseClass = PCI_CLASS_SERIAL_BUS_CTLR;
+        FdoExtension->SubClass = PCI_SUBCLASS_SB_USB;
+        FdoExtension->ProgIf = (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB2) ?
+                               PCI_INTERFACE_USB_ID_EHCI : PCI_INTERFACE_USB_ID_OHCI;
+        DeviceDescription.InterfaceType = Internal;
+    }
 
     DeviceDescription.Version = DEVICE_DESCRIPTION_VERSION;
     DeviceDescription.Master = TRUE;
     DeviceDescription.ScatterGather = TRUE;
     DeviceDescription.Dma32BitAddresses = TRUE;
-    DeviceDescription.InterfaceType = PCIBus;
     DeviceDescription.DmaWidth = Width32Bits;
     DeviceDescription.DmaSpeed = Compatible;
     DeviceDescription.MaximumLength = MAXULONG;
@@ -888,7 +902,8 @@ USBPORT_StartDevice(IN PDEVICE_OBJECT FdoDevice,
 
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("USBPORT_StartDevice: RegisterDeviceInterface failed!\n");
+        /* The PnP manager must not see a started controller and ask it for a root hub */
+        Status = STATUS_UNSUCCESSFUL;
         goto ExitWithError;
     }
 
