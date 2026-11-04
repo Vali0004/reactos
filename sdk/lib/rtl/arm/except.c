@@ -133,8 +133,8 @@ RtlDispatchException(
 /*
  * @implemented
  *
- * Runs the termination handlers of every frame registered after TargetFrame
- * and removes those frames, all of them when TargetFrame is NULL. TargetIp
+ * Runs the termination handlers of every frame newer than TargetFrame and
+ * removes those frames, all of them when TargetFrame is NULL. TargetIp
  * and ReturnValue are not used, PSEH3 resumes the target frame itself.
  */
 VOID
@@ -167,9 +167,14 @@ RtlUnwind(
 
     Head = RtlpArmExceptionListHead();
     for (RegistrationFrame = *Head;
-         !RtlpArmIsChainEnd(RegistrationFrame) && (RegistrationFrame != TargetFrame);
+         !RtlpArmIsChainEnd(RegistrationFrame);
          RegistrationFrame = *Head)
     {
+        /* The stack grows down, frames at or above the target are older,
+           longjmp passes the stack pointer of its setjmp here */
+        if (TargetFrame && ((ULONG_PTR)RegistrationFrame >= (ULONG_PTR)TargetFrame))
+            break;
+
         /* PSEH3 unlinks its own frame while unwinding, others are taken off here */
         RegistrationFrame->Handler(ExceptionRecord, RegistrationFrame, &Context, NULL);
         if (*Head == RegistrationFrame)
