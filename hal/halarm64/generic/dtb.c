@@ -349,6 +349,9 @@ HalpDtbInitialize(
     HalpPlatform.DeviceTree = Fdt;
     HalpDeviceTreePlatform = TRUE;
 
+    /* SoC masters on device tree boards mostly do not snoop, Allwinner's leave dma-coherent out */
+    KeSetDmaIoCoherency(KE_DMA_IO_NOT_COHERENT);
+
     HalpDtbParseGic(Fdt);
     HalpDtbParseCpus(Fdt);
     HalpDtbParseTimer(Fdt);

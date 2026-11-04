@@ -753,6 +753,10 @@ HalGetAdapter(IN PDEVICE_DESCRIPTION DeviceDescription,
     MaximumLength = DeviceDescription->MaximumLength & MAXLONG;
     if ((DeviceDescription->ScatterGather) &&
         ((DeviceDescription->InterfaceType == Eisa) ||
+#ifdef _M_ARM64
+         /* device tree bus masters, there is no ISA memory for bounce buffers */
+         ((DeviceDescription->InterfaceType == Internal) && (DeviceDescription->Master)) ||
+#endif
          (DeviceDescription->InterfaceType == PCIBus)))
     {
         MapRegisters = 0;
@@ -1563,7 +1567,9 @@ HalAllocateAdapterChannel(IN PADAPTER_OBJECT AdapterObject,
 
     if ((NumberOfMapRegisters) && (AdapterObject->NeedsMapRegisters))
     {
-        if (NumberOfMapRegisters > AdapterObject->MapRegistersPerChannel)
+        /* no map buffers could be allocated at boot */
+        if (!MasterAdapter ||
+            (NumberOfMapRegisters > AdapterObject->MapRegistersPerChannel))
         {
             AdapterObject->NumberOfMapRegisters = 0;
             IoFreeAdapterChannel(AdapterObject);
