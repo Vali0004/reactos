@@ -1,3 +1,8 @@
+# off Windows there is no armasm64, ARM64 asm goes through the GAS side of kxarm64.h
+if(ARCH STREQUAL "arm64" AND NOT CMAKE_HOST_WIN32)
+    set(MSVC_ARM64_GAS TRUE)
+endif()
+
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     add_compile_options(/Ox /Ob2 /Ot /Oy)
