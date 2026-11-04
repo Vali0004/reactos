@@ -9,6 +9,9 @@
 
 #include <uefildr.h>
 #include "../vidfb.h"
+#if defined(_M_ARM) || defined(_M_ARM64)
+#include <fdt.h>
+#endif
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(HWDETECT);
@@ -433,6 +436,98 @@ DetectAcpiBios(PCONFIGURATION_COMPONENT_DATA SystemKey, ULONG *BusNumber)
     }
 }
 
+#if defined(_M_ARM) || defined(_M_ARM64)
+/* EFI_DTB_TABLE_GUID from the UEFI specification */
+static const EFI_GUID DtbTableGuid =
+    { 0xB1B621D5, 0xF19C, 0x41A5, { 0x83, 0x0B, 0xD9, 0x15, 0x2C, 0x69, 0xAA, 0xE0 } };
+
+/**
+ * @brief Hands the firmware's device tree to the kernel, the HAL reads it without ACPI.
+ *
+ * Firmware may keep it in boot services memory, so a trimmed copy goes into
+ * memory the kernel never reclaims.
+ */
+static
+VOID
+DetectDeviceTree(
+    _In_ PCONFIGURATION_COMPONENT_DATA SystemKey,
+    _Inout_ ULONG *BusNumber)
+{
+    PCONFIGURATION_COMPONENT_DATA BiosKey;
+    PCM_PARTIAL_RESOURCE_LIST PartialResourceList;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR PartialDescriptor;
+    PFDT_BIOS_DATA FdtData;
+    PVOID Fdt = NULL, Copy;
+    ULONG Size, UsedSize;
+    UINTN i;
+
+    for (i = 0; i < GlobalSystemTable->NumberOfTableEntries; i++)
+    {
+        if (!memcmp(&GlobalSystemTable->ConfigurationTable[i].VendorGuid,
+                    &DtbTableGuid, sizeof(DtbTableGuid)))
+        {
+            Fdt = GlobalSystemTable->ConfigurationTable[i].VendorTable;
+            break;
+        }
+    }
+
+    if (!Fdt)
+        return;
+
+    if (!FdtCheckHeader(Fdt))
+    {
+        ERR("The firmware device tree at %p is not usable\n", Fdt);
+        return;
+    }
+
+    UsedSize = FdtUsedSize(Fdt);
+    Copy = MmAllocateMemoryWithType(UsedSize, LoaderFirmwarePermanent);
+    if (!Copy)
+    {
+        ERR("No memory for the %lu byte device tree\n", UsedSize);
+        return;
+    }
+    RtlCopyMemory(Copy, Fdt, UsedSize);
+    FdtSetTotalSize(Copy, UsedSize);
+
+    Size = FIELD_OFFSET(CM_PARTIAL_RESOURCE_LIST, PartialDescriptors[1]) + sizeof(FDT_BIOS_DATA);
+    PartialResourceList = FrLdrHeapAlloc(Size, TAG_HW_RESOURCE_LIST);
+    if (!PartialResourceList)
+    {
+        ERR("Failed to allocate resource descriptor\n");
+        return;
+    }
+
+    RtlZeroMemory(PartialResourceList, Size);
+    PartialResourceList->Count = 1;
+
+    PartialDescriptor = &PartialResourceList->PartialDescriptors[0];
+    PartialDescriptor->Type = CmResourceTypeDeviceSpecific;
+    PartialDescriptor->ShareDisposition = CmResourceShareUndetermined;
+    PartialDescriptor->u.DeviceSpecificData.DataSize = sizeof(FDT_BIOS_DATA);
+
+    /* Physical and loader addresses are the same under UEFI */
+    FdtData = (PFDT_BIOS_DATA)(PartialDescriptor + 1);
+    FdtData->Address.QuadPart = (ULONG_PTR)Copy;
+    FdtData->Size = UsedSize;
+
+    TRACE("Device tree at %p, %lu bytes\n", Copy, UsedSize);
+
+    FldrCreateComponentKey(SystemKey,
+                           AdapterClass,
+                           MultiFunctionAdapter,
+                           0x0,
+                           0x0,
+                           0xFFFFFFFF,
+                           FDT_ADAPTER_IDENTIFIER,
+                           PartialResourceList,
+                           Size,
+                           &BiosKey);
+
+    (*BusNumber)++;
+}
+#endif
+
 static VOID
 DetectDisplayController(
     _In_ PCONFIGURATION_COMPONENT_DATA BusKey)
@@ -728,6 +823,9 @@ UefiHwDetect(
     DetectPciBus(SystemKey, &BusNumber, UefiDetectPciBus);
 #endif
     DetectAcpiBios(SystemKey, &BusNumber);
+#if defined(_M_ARM) || defined(_M_ARM64)
+    DetectDeviceTree(SystemKey, &BusNumber);
+#endif
 
     TRACE("DetectHardware() Done\n");
     return SystemKey;
