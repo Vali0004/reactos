@@ -19,6 +19,11 @@ PVOID BasicStack;
 
 void _changestack(VOID);
 
+#ifdef _M_ARM
+/* uefiasm.s, firmware may leave VFP and NEON off while compiled code uses them */
+VOID ArmEnableVfp(VOID);
+#endif
+
 /* FUNCTIONS ******************************************************************/
 
 EFI_STATUS
@@ -27,6 +32,10 @@ EfiEntry(
     _In_ EFI_SYSTEM_TABLE *SystemTable)
 {
     PCSTR CmdLine = ""; // FIXME: Determine a command-line from UEFI boot options
+
+#ifdef _M_ARM
+    ArmEnableVfp();
+#endif
 
     SystemTable->ConOut->OutputString(SystemTable->ConOut, L"UEFI EntryPoint: Starting freeldr from UEFI");
     GlobalImageHandle = ImageHandle;

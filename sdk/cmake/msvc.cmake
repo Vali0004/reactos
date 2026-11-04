@@ -620,6 +620,12 @@ endfunction()
 # handle C++ options
 # disable RTTI unless said so
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_RTTI>>,/GR,/GR->>")
+# movw/movt pairs need IMAGE_REL_BASED_THUMB_MOV32, which neither the ReactOS
+# relocator nor U-Boot's EFI loader apply, literal pools get plain HIGHLOW ones
+if(USE_CLANG_CL AND ARCH STREQUAL "arm")
+    add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-mno-movt>")
+endif()
+
 # disable exceptions unless said so
 if(USE_CLANG_CL AND ARCH STREQUAL "arm")
     # LLVM cannot emit C++ exception handling for 32-bit ARM Windows

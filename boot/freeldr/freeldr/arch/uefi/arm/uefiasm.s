@@ -16,6 +16,22 @@
 
 //
 // VOID
+// ArmEnableVfp(VOID);
+//
+// U-Boot leaves VFP and NEON off, the hard float code of the loader needs them.
+//
+    LEAF_ENTRY ArmEnableVfp
+    mrc     p15, 0, r0, c1, c0, 2       // CPACR
+    orr     r0, r0, #0x00F00000         // cp10 and cp11, all modes
+    mcr     p15, 0, r0, c1, c0, 2
+    isb
+    mov     r0, #0x40000000             // FPEXC.EN
+    vmsr    fpexc, r0
+    bx      lr
+    LEAF_END ArmEnableVfp
+
+//
+// VOID
 // _exituefi(VOID);
 //
 // Boot services are left on the stack the firmware gave us.
