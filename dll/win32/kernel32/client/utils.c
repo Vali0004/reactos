@@ -648,15 +648,16 @@ BaseInitializeContext(IN PCONTEXT Context,
 #elif defined(_M_ARM)
     DPRINT("BaseInitializeContext: %p\n", Context);
 
-    // FIXME: check if this is correct!
-    /* Setup the Initial Win32 Thread Context */
+    RtlZeroMemory(Context, sizeof(*Context));
+
+    /* the start routines take their arguments in r0 and r1, like arm64 no thunk is needed */
     Context->R0 = (ULONG_PTR)StartAddress;
     Context->R1 = (ULONG_PTR)Parameter;
-    Context->Sp = (ULONG_PTR)StackAddress;
+    Context->Sp = (ULONG_PTR)StackAddress & ~7;
 
     if (ContextType == 1)      /* For Threads */
     {
-        Context->Pc = (ULONG_PTR)BaseThreadStartupThunk;
+        Context->Pc = (ULONG_PTR)BaseThreadStartup;
     }
     else if (ContextType == 2) /* For Fibers */
     {
@@ -664,14 +665,15 @@ BaseInitializeContext(IN PCONTEXT Context,
     }
     else                       /* For first thread in a Process */
     {
-        Context->Pc = (ULONG_PTR)BaseProcessStartThunk;
+        Context->Pc = (ULONG_PTR)BaseProcessStartup;
     }
+
+    /* everything here is thumb, user mode */
+    Context->Pc &= ~1;
+    Context->Cpsr = 0x10 | 0x20;
 
     /* Set the Context Flags */
     Context->ContextFlags = CONTEXT_FULL;
-
-    /* Give it some room for the Parameter */
-    Context->Sp -= sizeof(PVOID);
 #elif defined(_M_ARM64)
     DPRINT("BaseInitializeContext: %p\n", Context);
     ASSERT(((ULONG_PTR)StackAddress & 15) == 0);
