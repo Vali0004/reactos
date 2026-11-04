@@ -49,7 +49,15 @@ KeContextToTrapFrame(IN PCONTEXT Context,
         // The rest is already in the right mode
         //
         TrapFrame->Pc = Context->Pc;
-        TrapFrame->Cpsr = Context->Cpsr;
+        if (PreviousMode == UserMode)
+        {
+            /* user mode keeps its flags, IT and Thumb state, never a mode or interrupt mask */
+            TrapFrame->Cpsr = (Context->Cpsr & 0xFE0FFC20) | CPSRM_USER;
+        }
+        else
+        {
+            TrapFrame->Cpsr = Context->Cpsr;
+        }
     }
 
     //

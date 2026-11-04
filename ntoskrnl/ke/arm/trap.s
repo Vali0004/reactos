@@ -234,6 +234,7 @@ LABEL(KiArmCompleteStore)
  * non-volatiles. The frames need not be the ones the trap entry built.
  */
     LEAF_ENTRY KiExceptionExit
+    ldr r11, [r1, #ExR11]
     ldr r4, [r1, #ExR4]
     ldr r5, [r1, #ExR5]
     ldr r6, [r1, #ExR6]
@@ -247,6 +248,8 @@ LABEL(KiArmCompleteStore)
 
 /* back from a C handler, sp at the exception frame the entry built */
     LEAF_ENTRY KiArmTrapExit
+    /* the exception frame owns r11, KeContextToTrapFrame writes it there */
+    ldr r11, [sp, #ExR11]
     ldr r4, [sp, #ExR4]
     ldr r5, [sp, #ExR5]
     ldr r6, [sp, #ExR6]
@@ -277,7 +280,6 @@ LABEL(KiArmExitKernel)
     ldr lr, [sp, #TrLr]
 
 LABEL(KiArmExitCommon)
-    ldr r11, [sp, #TrR11]
     ldr r12, [sp, #TrR12]
     ldr r3, [sp, #TrR3]
     ldr r2, [sp, #TrR2]

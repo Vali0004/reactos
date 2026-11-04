@@ -89,8 +89,8 @@ KiArmRestoreInterrupts(
  *
  * Returns with interrupts off, the trap exit restores the user state.
  */
-static
 VOID
+NTAPI
 KiArmExitToUser(
     _Inout_ PKTRAP_FRAME TrapFrame,
     _Inout_ PKEXCEPTION_FRAME ExceptionFrame)

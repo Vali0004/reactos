@@ -719,18 +719,27 @@ typedef struct _UCALLOUT_FRAME
     MACHINE_FRAME MachineFrame;
 } UCALLOUT_FRAME, *PUCALLOUT_FRAME;
 
+/* What KiThreadStartup hands the system routine, as on ARM64 */
 typedef struct _KSTART_FRAME
 {
-    ULONG R0;
-    ULONG R1;
-    ULONG R2;
-    ULONG Return;
+    ULONG SystemRoutine;
+    ULONG StartRoutine;
+    ULONG StartContext;
+    ULONG UserThread;
 } KSTART_FRAME, *PKSTART_FRAME;
 
+/* KiSwapContext keeps every non-volatile here, Return is where the thread resumes */
 typedef struct _KSWITCH_FRAME
 {
     KIRQL ApcBypass;
-    UCHAR Fill[7];
+    UCHAR Fill[3];
+    ULONG R4;
+    ULONG R5;
+    ULONG R6;
+    ULONG R7;
+    ULONG R8;
+    ULONG R9;
+    ULONG R10;
     ULONG R11;
     ULONG Return;
 } KSWITCH_FRAME, *PKSWITCH_FRAME;

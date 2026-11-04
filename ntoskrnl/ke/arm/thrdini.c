@@ -1,151 +1,186 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         BSD - See COPYING.ARM in the top level directory
- * FILE:            ntoskrnl/ke/arm/thrdini.c
- * PURPOSE:         Implements thread context setup and startup for ARM machines
- * PROGRAMMERS:     ReactOS Portable Systems Group
+ * PROJECT:     ReactOS Kernel
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
+ * PURPOSE:     ARMv7 thread initialization and context switch support, after ARM64
+ * COPYRIGHT:   Copyright 2026 Jonathan McAvin <mcavinjohn@gmail.com>
  */
 
-/* INCLUDES *******************************************************************/
+/* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
 #define NDEBUG
 #include <debug.h>
 
-/* GLOBALS ********************************************************************/
+VOID
+NTAPI
+KiThreadStartup(VOID);
 
-typedef struct _KSWITCHFRAME
-{
-    PVOID ExceptionList;
-    BOOLEAN ApcBypassDisable;
-    PVOID RetAddr;
-} KSWITCHFRAME, *PKSWITCHFRAME;
+/* trapc.c, delivers user APCs and returns with interrupts off */
+VOID
+NTAPI
+KiArmExitToUser(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_ PKEXCEPTION_FRAME ExceptionFrame);
 
+/* The first switch to a user thread unwinds this, top down into user mode */
 typedef struct _KUINIT_FRAME
 {
-    KEXCEPTION_FRAME CtxSwitchFrame;
+    KSWITCH_FRAME CtxSwitchFrame;
+    KSTART_FRAME StartFrame;
     KEXCEPTION_FRAME ExceptionFrame;
     KTRAP_FRAME TrapFrame;
 } KUINIT_FRAME, *PKUINIT_FRAME;
 
 typedef struct _KKINIT_FRAME
 {
-    KEXCEPTION_FRAME CtxSwitchFrame;
+    KSWITCH_FRAME CtxSwitchFrame;
+    KSTART_FRAME StartFrame;
 } KKINIT_FRAME, *PKKINIT_FRAME;
 
-/* FUNCTIONS ******************************************************************/
+/* the trap exit takes the exception frame right below the trap frame */
+C_ASSERT(FIELD_OFFSET(KUINIT_FRAME, TrapFrame) ==
+         FIELD_OFFSET(KUINIT_FRAME, ExceptionFrame) + sizeof(KEXCEPTION_FRAME));
+C_ASSERT((sizeof(KUINIT_FRAME) % 8) == 0);
+C_ASSERT((sizeof(KKINIT_FRAME) % 8) == 0);
+
+/* FUNCTIONS *****************************************************************/
 
 VOID
 NTAPI
-KiThreadStartup(VOID);
-
-VOID
-FASTCALL
-KiSwitchThreads(
-    IN PKTHREAD OldThread,
-    IN PKTHREAD NewThread
-);
-
-
-/* FIXME: THIS IS TOTALLY BUSTED NOW */
-VOID
-NTAPI
-KiInitializeContextThread(IN PKTHREAD Thread,
-                          IN PKSYSTEM_ROUTINE SystemRoutine,
-                          IN PKSTART_ROUTINE StartRoutine,
-                          IN PVOID StartContext,
-                          IN PCONTEXT ContextPointer)
+KiInitializeContextThread(
+    _In_ PKTHREAD Thread,
+    _In_ PKSYSTEM_ROUTINE SystemRoutine,
+    _In_ PKSTART_ROUTINE StartRoutine,
+    _In_ PVOID StartContext,
+    _In_opt_ PCONTEXT Context)
 {
-    PKTRAP_FRAME TrapFrame;
-    PKEXCEPTION_FRAME ExceptionFrame = NULL, CtxSwitchFrame;
+    PKSWITCH_FRAME CtxSwitchFrame;
+    PKSTART_FRAME StartFrame;
 
-    //
-    // Check if this is a user thread
-    //
-    if (ContextPointer)
+    if (Context)
     {
-        //
-        // Setup the initial frame
-        //
-        PKUINIT_FRAME InitFrame;
-        InitFrame = (PKUINIT_FRAME)((ULONG_PTR)Thread->InitialStack -
-                                    sizeof(KUINIT_FRAME));
+        PKUINIT_FRAME InitFrame = ((PKUINIT_FRAME)Thread->InitialStack) - 1;
+        PKEXCEPTION_FRAME ExceptionFrame = &InitFrame->ExceptionFrame;
+        PKTRAP_FRAME TrapFrame = &InitFrame->TrapFrame;
 
-        //
-        // Setup the Trap Frame and Exception frame
-        //
-        TrapFrame = &InitFrame->TrapFrame;
-        ExceptionFrame = &InitFrame->ExceptionFrame;
+        RtlZeroMemory(InitFrame, sizeof(*InitFrame));
+        CtxSwitchFrame = &InitFrame->CtxSwitchFrame;
+        StartFrame = &InitFrame->StartFrame;
 
-        ///
-        // Zero out the trap frame and exception frame
-        //
-        RtlZeroMemory(TrapFrame, sizeof(KTRAP_FRAME));
-        RtlZeroMemory(ExceptionFrame, sizeof(KEXCEPTION_FRAME));
-
-        //
-        // Set up a trap frame from the context
-        //
-        KeContextToTrapFrame(ContextPointer,
-                             ExceptionFrame,
-                             TrapFrame,
-                             ContextPointer->ContextFlags | CONTEXT_CONTROL,
-                             UserMode);
-
-        //
-        // Set the previous mode as user
-        //
-        //TrapFrame->PreviousMode = UserMode;
+        Thread->KernelStack = InitFrame;
         Thread->PreviousMode = UserMode;
 
-        //
-        // Clear the return address
-        //
-        ExceptionFrame->Return = 0;
+        ASSERT((Context->ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL);
+        TrapFrame->PreviousMode = UserMode;
+        TrapFrame->Reserved = 0xBADB0D00;
+        KeContextToTrapFrame(Context,
+                             ExceptionFrame,
+                             TrapFrame,
+                             Context->ContextFlags | CONTEXT_CONTROL,
+                             UserMode);
 
-        //
-        // Context switch frame to setup below
-        //
-        CtxSwitchFrame = &InitFrame->CtxSwitchFrame;
+        StartFrame->UserThread = TRUE;
     }
     else
     {
-        //
-        // Set up the Initial Frame for the system thread
-        //
-        PKKINIT_FRAME InitFrame;
-        InitFrame = (PKKINIT_FRAME)((ULONG_PTR)Thread->InitialStack -
-                                    sizeof(KKINIT_FRAME));
+        PKKINIT_FRAME InitFrame = ((PKKINIT_FRAME)Thread->InitialStack) - 1;
 
-        //
-        // Set the previous mode as kernel
-        //
-        Thread->PreviousMode = KernelMode;
-
-        //
-        // Context switch frame to setup below
-        //
+        RtlZeroMemory(InitFrame, sizeof(*InitFrame));
         CtxSwitchFrame = &InitFrame->CtxSwitchFrame;
+        StartFrame = &InitFrame->StartFrame;
+
+        Thread->KernelStack = InitFrame;
+        Thread->PreviousMode = KernelMode;
+        StartFrame->UserThread = FALSE;
     }
 
-    //
-    // Now setup the context switch frame
-    //
     CtxSwitchFrame->Return = (ULONG)KiThreadStartup;
-    CtxSwitchFrame->R11 = (ULONG)(ExceptionFrame ? ExceptionFrame : CtxSwitchFrame);
+    CtxSwitchFrame->ApcBypass = TRUE;
 
-    //
-    // Set the parameters
-    //
-    CtxSwitchFrame->R4 = (ULONG)ContextPointer;
-    CtxSwitchFrame->R5 = (ULONG)StartContext;
-    CtxSwitchFrame->R6 = (ULONG)StartRoutine;
-    CtxSwitchFrame->R7 = (ULONG)SystemRoutine;
+    StartFrame->SystemRoutine = (ULONG)SystemRoutine;
+    StartFrame->StartRoutine = (ULONG)StartRoutine;
+    StartFrame->StartContext = (ULONG)StartContext;
+}
 
-    //
-    // Save back the new value of the kernel stack
-    //
-    Thread->KernelStack = (PVOID)CtxSwitchFrame;
+/**
+ * @brief Runs the system routine of a new thread, called from KiThreadStartup.
+ *
+ * System threads never come back. User threads return once their trap
+ * frame is ready for the first switch to user mode, with interrupts off.
+ */
+VOID
+NTAPI
+KiArmStartThread(
+    _In_ PKSTART_FRAME StartFrame)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+
+    KeLowerIrql(APC_LEVEL);
+    _enable();
+
+    ((PKSYSTEM_ROUTINE)StartFrame->SystemRoutine)((PKSTART_ROUTINE)StartFrame->StartRoutine,
+                                                   (PVOID)StartFrame->StartContext);
+
+    if (!StartFrame->UserThread)
+        KeBugCheck(NO_USER_MODE_CONTEXT);
+
+    /* user mode finds its TEB in TPIDRURW */
+    _MoveToCoprocessor((ULONG)Thread->Teb, 15, 0, 13, 0, 2);
+
+    /* the first instructions in user mode come as a user APC, LdrInitializeThunk */
+    KeLowerIrql(PASSIVE_LEVEL);
+    KiArmExitToUser(KeGetTrapFrame(Thread), (PKEXCEPTION_FRAME)(StartFrame + 1));
+}
+
+BOOLEAN
+KiSwapContextResume(
+    _In_ BOOLEAN ApcBypass,
+    _In_ PKTHREAD OldThread,
+    _In_ PKTHREAD NewThread)
+{
+    PKIPCR Pcr = (PKIPCR)KeGetPcr();
+    PKPROCESS OldProcess, NewProcess;
+    ULONG64 CurrentCycleTime, ElapsedCycles;
+
+    OldProcess = OldThread->ApcState.Process;
+    NewProcess = NewThread->ApcState.Process;
+    if (OldProcess != NewProcess)
+        KiSwapProcess(NewProcess, OldProcess);
+
+    CurrentCycleTime = KxQueryProcessorCycleTime();
+    ElapsedCycles = CurrentCycleTime - Pcr->Prcb.StartCycles;
+    ((PETHREAD)OldThread)->CycleTime += ElapsedCycles;
+    Pcr->Prcb.StartCycles = CurrentCycleTime;
+
+    /* user mode finds its TEB in TPIDRURW, the kernel keeps it in the PCR as well */
+    Pcr->NtTib.Self = (PVOID)NewThread->Teb;
+    _MoveToCoprocessor((ULONG)NewThread->Teb, 15, 0, 13, 0, 2);
+
+    Pcr->Prcb.KeContextSwitches++;
+    NewThread->ContextSwitches++;
+
+    if (Pcr->Prcb.DpcRoutineActive)
+    {
+        KeBugCheckEx(ATTEMPTED_SWITCH_FROM_DPC,
+                     (ULONG_PTR)OldThread,
+                     (ULONG_PTR)NewThread,
+                     (ULONG_PTR)OldThread->InitialStack,
+                     0);
+    }
+
+    /* The old stack is no longer in use, another processor may take the thread */
+    KeMemoryBarrier();
+    OldThread->SwapBusy = FALSE;
+
+    if (NewThread->ApcState.KernelApcPending)
+    {
+        if ((NewThread->SpecialApcDisable == 0) && (ApcBypass == 0))
+            return TRUE;
+
+        HalRequestSoftwareInterrupt(APC_LEVEL);
+    }
+
+    return FALSE;
 }
 
 DECLSPEC_NORETURN
@@ -155,206 +190,97 @@ KiIdleLoop(VOID)
     PKPRCB Prcb = KeGetCurrentPrcb();
     PKTHREAD OldThread, NewThread;
 
-    /* Now loop forever */
-    while (TRUE)
+    for (;;)
     {
-        /* Start of the idle loop: disable interrupts */
         _enable();
         YieldProcessor();
         YieldProcessor();
         _disable();
 
-        /* Check for pending timers, pending DPCs, or pending ready threads */
         if ((Prcb->DpcData[0].DpcQueueDepth) ||
             (Prcb->TimerRequest) ||
             (Prcb->DeferredReadyListHead.Next))
         {
-            /* Quiesce the DPC software interrupt */
             HalClearSoftwareInterrupt(DISPATCH_LEVEL);
-
-            /* Handle it */
             KiRetireDpcList(Prcb);
         }
 
-        /* Check if a new thread is scheduled for execution */
         if (Prcb->NextThread)
         {
-            /* Enable interrupts */
             _enable();
 
-            /* Capture current thread data */
             OldThread = Prcb->CurrentThread;
             NewThread = Prcb->NextThread;
-
-            /* Set new thread data */
             Prcb->NextThread = NULL;
             Prcb->CurrentThread = NewThread;
-
-            /* The thread is now running */
             NewThread->State = Running;
 
-#ifdef CONFIG_SMP
-            /* Do the swap at SYNCH_LEVEL */
-            KfRaiseIrql(SYNCH_LEVEL);
-#endif
-
-            /* Switch away from the idle thread */
             KiSwapContext(APC_LEVEL, OldThread);
-
-#ifdef CONFIG_SMP
-            /* Go back to DISPATCH_LEVEL */
-            KeLowerIrql(DISPATCH_LEVEL);
-#endif
         }
         else
         {
-            /* Continue staying idle. Note the HAL returns with interrupts on */
+            /* The HAL returns with interrupts on */
             Prcb->PowerState.IdleFunction(&Prcb->PowerState);
         }
     }
 }
 
-BOOLEAN
-FASTCALL
-KiSwapContextExit(IN PKTHREAD OldThread,
-                  IN PKSWITCHFRAME SwitchFrame)
-{
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
-    PKPROCESS OldProcess, NewProcess;
-    PKTHREAD NewThread;
-    ARM_TTB_REGISTER TtbRegister;
-
-    /* We are on the new thread stack now */
-    NewThread = Pcr->Prcb.CurrentThread;
-
-    /* Now we are the new thread. Check if it's in a new process */
-    OldProcess = OldThread->ApcState.Process;
-    NewProcess = NewThread->ApcState.Process;
-    if (OldProcess != NewProcess)
-    {
-        TtbRegister.AsUlong = NewProcess->DirectoryTableBase[0];
-        ASSERT(TtbRegister.Reserved == 0);
-        KeArmTranslationTableRegisterSet(TtbRegister);
-    }
-
-    /* Increase thread context switches */
-    NewThread->ContextSwitches++;
-
-    /* DPCs shouldn't be active */
-    if (Pcr->Prcb.DpcRoutineActive)
-    {
-        /* Crash the machine */
-        KeBugCheckEx(ATTEMPTED_SWITCH_FROM_DPC,
-                     (ULONG_PTR)OldThread,
-                     (ULONG_PTR)NewThread,
-                     (ULONG_PTR)OldThread->InitialStack,
-                     0);
-    }
-
-    /* Kernel APCs may be pending */
-    if (NewThread->ApcState.KernelApcPending)
-    {
-        /* Are APCs enabled? */
-        if (!NewThread->SpecialApcDisable)
-        {
-            /* Request APC delivery */
-            if (SwitchFrame->ApcBypassDisable) HalRequestSoftwareInterrupt(APC_LEVEL);
-            return TRUE;
-        }
-    }
-
-    /* Return */
-    return FALSE;
-}
-
-VOID
-FASTCALL
-KiSwapContextEntry(IN PKSWITCHFRAME SwitchFrame,
-                   IN ULONG_PTR OldThreadAndApcFlag)
-{
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
-    PKTHREAD OldThread, NewThread;
-
-    /* Save APC bypass disable */
-    SwitchFrame->ApcBypassDisable = OldThreadAndApcFlag & 3;
-
-    /* Increase context switch count and check if tracing is enabled */
-    Pcr->Prcb.KeContextSwitches++;
-#if 0
-    if (Pcr->PerfGlobalGroupMask)
-    {
-        /* We don't support this yet on x86 either */
-        DPRINT1("WMI Tracing not supported\n");
-        ASSERT(FALSE);
-    }
-#endif // 0
-
-    /* Get thread pointers */
-    OldThread = (PKTHREAD)(OldThreadAndApcFlag & ~3);
-    NewThread = Pcr->Prcb.CurrentThread;
-
-    /* Get the old thread and set its kernel stack */
-    OldThread->KernelStack = SwitchFrame;
-
-    /* Do the switch */
-    KiSwitchThreads(OldThread, NewThread->KernelStack);
-}
-
-VOID
+/**
+ * @brief Copies the current stack to a new kernel stack.
+ *
+ * Every frame record saves the caller's r11, the chain in the copy is moved
+ * along with the thread's stack fields. KeSwitchKernelStack moves sp and r11
+ * by the returned offset.
+ */
+LONG_PTR
 NTAPI
-KiDispatchInterrupt(VOID)
+KiSwitchKernelStack(
+    _In_ PVOID StackBase,
+    _In_ PVOID StackLimit,
+    _In_ PULONG_PTR CallerFrame,
+    _Out_ PVOID *OldStackBase)
 {
-    PKIPCR Pcr = (PKIPCR)KeGetPcr();
-    PKPRCB Prcb = &Pcr->Prcb;
-    PKTHREAD NewThread, OldThread;
+    PKTHREAD Thread = KeGetCurrentThread();
+    ULONG_PTR OldBase, OldLimit, Saved;
+    PULONG_PTR Frame;
+    LONG_PTR Offset;
+    BOOLEAN Enabled;
+    SIZE_T Size;
 
-    /* Disable interrupts */
-    _disable();
+    OldBase = (ULONG_PTR)Thread->StackBase;
+    OldLimit = Thread->StackLimit;
+    Size = OldBase - OldLimit;
+    ASSERT(Size <= (ULONG_PTR)StackBase - (ULONG_PTR)StackLimit);
 
-    /* Check for pending timers, pending DPCs, or pending ready threads */
-    if ((Prcb->DpcData[0].DpcQueueDepth) ||
-        (Prcb->TimerRequest) ||
-        (Prcb->DeferredReadyListHead.Next))
+    Enabled = KeDisableInterrupts();
+
+    RtlCopyMemory((PUCHAR)StackBase - Size, (PVOID)OldLimit, Size);
+    Offset = (PUCHAR)StackBase - (PUCHAR)OldBase;
+
+    /* User mode frame pointers end the chain, they never point into the stack */
+    Frame = (PULONG_PTR)((ULONG_PTR)CallerFrame + Offset);
+    for (;;)
     {
-        /* Retire DPCs while under the DPC stack */
-        //KiRetireDpcListInDpcStack(Prcb, Prcb->DpcStack);
-        // FIXME!!! //
-        KiRetireDpcList(Prcb);
+        Saved = Frame[0];
+        if ((Saved < OldLimit) || (Saved >= OldBase))
+            break;
+
+        Frame[0] = Saved + Offset;
+        Frame = (PULONG_PTR)(Saved + Offset);
     }
 
-    /* Re-enable interrupts */
-    _enable();
+    if (((ULONG_PTR)Thread->TrapFrame >= OldLimit) && ((ULONG_PTR)Thread->TrapFrame < OldBase))
+        Thread->TrapFrame = (PKTRAP_FRAME)((ULONG_PTR)Thread->TrapFrame + Offset);
 
-    /* Check for quantum end */
-    if (Prcb->QuantumEnd)
-    {
-        /* Handle quantum end */
-        Prcb->QuantumEnd = FALSE;
-        KiQuantumEnd();
-    }
-    else if (Prcb->NextThread)
-    {
-        /* Acquire the PRCB lock */
-        KiAcquirePrcbLock(Prcb);
+    Thread->InitialStack = (PVOID)((ULONG_PTR)Thread->InitialStack + Offset);
+    Thread->StackBase = StackBase;
+    Thread->StackLimit = (ULONG_PTR)StackLimit;
+    Thread->LargeStack = TRUE;
 
-        /* Capture current thread data */
-        OldThread = Prcb->CurrentThread;
-        NewThread = Prcb->NextThread;
+    KeRestoreInterrupts(Enabled);
 
-        /* Set new thread data */
-        Prcb->NextThread = NULL;
-        Prcb->CurrentThread = NewThread;
-
-        /* The thread is now running */
-        NewThread->State = Running;
-        OldThread->WaitReason = WrDispatchInt;
-
-        /* Make the old thread ready */
-        KxQueueReadyThread(OldThread, Prcb);
-
-        /* Swap to the new thread */
-        KiSwapContext(APC_LEVEL, OldThread);
-    }
+    *OldStackBase = (PVOID)OldBase;
+    return Offset;
 }
 
 /* EOF */
