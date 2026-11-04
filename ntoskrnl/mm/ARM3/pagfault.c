@@ -496,6 +496,12 @@ MiCheckPdeForPagedPool(IN PVOID Address)
                                MmSystemPagePtes[((ULONG_PTR)PointerPde & (SYSTEM_PD_SIZE - 1)) / sizeof(MMPTE)].u.Long);
     }
 
+#ifdef _M_ARM
+    /* the mmu walks the hardware l1, a pde copied in earlier may be missing there */
+    if (PointerPde->u.Hard.Valid)
+        MiArmSyncL1(PointerPde);
+#endif
+
     //
     // Return status
     //
