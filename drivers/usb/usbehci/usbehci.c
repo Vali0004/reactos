@@ -987,6 +987,7 @@ EHCI_InitializeHardware(IN PEHCI_EXTENSION EhciExtension)
     PEHCI_HC_CAPABILITY_REGISTERS CapabilityRegisters;
     PEHCI_HW_REGISTERS OperationalRegs;
     EHCI_USB_COMMAND Command;
+    EHCI_USB_STATUS Status;
     LARGE_INTEGER EndTime;
     LARGE_INTEGER CurrentTime;
     EHCI_HC_STRUCTURAL_PARAMS StructuralParams;
@@ -996,7 +997,31 @@ EHCI_InitializeHardware(IN PEHCI_EXTENSION EhciExtension)
     OperationalRegs = EhciExtension->OperationalRegs;
     CapabilityRegisters = EhciExtension->CapabilityRegisters;
 
+    /* Firmware may leave the controller running, HCRESET is undefined until it halts */
     Command.AsULONG = READ_REGISTER_ULONG(&OperationalRegs->HcCommand.AsULONG);
+    if (Command.Run)
+    {
+        Command.Run = 0;
+        WRITE_REGISTER_ULONG(&OperationalRegs->HcCommand.AsULONG, Command.AsULONG);
+
+        /* The spec gives a running controller 16 microframes, 2 ms, to halt */
+        KeQuerySystemTime(&EndTime);
+        EndTime.QuadPart += 20 * 10000; // 20 msec
+        do
+        {
+            Status.AsULONG = READ_REGISTER_ULONG(&OperationalRegs->HcStatus.AsULONG);
+            if (Status.HCHalted)
+                break;
+            KeQuerySystemTime(&CurrentTime);
+        }
+        while (CurrentTime.QuadPart < EndTime.QuadPart);
+
+        if (!Status.HCHalted)
+            DPRINT1("EHCI_InitializeHardware: controller did not halt, resetting anyway\n");
+    }
+
+    Command.AsULONG = READ_REGISTER_ULONG(&OperationalRegs->HcCommand.AsULONG);
+    Command.Run = 0;
     Command.Reset = 1;
     WRITE_REGISTER_ULONG(&OperationalRegs->HcCommand.AsULONG, Command.AsULONG);
 
