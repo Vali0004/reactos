@@ -352,4 +352,14 @@ KeGetCurrentProcessorNumber(VOID)
 }
 #endif /* (NTDDI_VERSION < NTDDI_WIN7) || !defined(NT_PROCESSOR_GROUPS) */
 
+#if (NTDDI_VERSION >= NTDDI_WIN7)
+/* the same KPRCB::Number byte, there are no processor groups yet */
+FORCEINLINE
+ULONG
+KeGetCurrentProcessorIndex(VOID)
+{
+    return (ULONG)*((PUCHAR)KIPCR() + 0x580);
+}
+#endif
+
 $endif (_NTDDK_)
