@@ -1,7 +1,7 @@
 /*
  * PROJECT:     ReactOS Kernel
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     PL011 serial port for the kernel debugger on ARM64
+ * PURPOSE:     PL011 and 16550 serial ports for the kernel debugger on ARM64
  * COPYRIGHT:   Copyright 2026 Justin Miller <justin.miller@reactos.org>
  */
 
@@ -9,6 +9,7 @@
 
 #include <ntoskrnl.h>
 #include <drivers/acpi/acpi.h>
+#include <fdtarc.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -23,6 +24,28 @@
 #define UART_CR_UARTEN      0x001
 #define UART_CR_TXE         0x100
 #define UART_CR_RXE         0x200
+
+/* 16550 registers in register units, the stride comes from the firmware */
+#define NS16550_RBR         0
+#define NS16550_THR         0
+#define NS16550_LSR         5
+
+#define NS16550_LSR_DR      0x01
+#define NS16550_LSR_THRE    0x20
+
+/* GLOBALS *******************************************************************/
+
+/* One debug port, its kind and register layout */
+typedef enum _KDP_UART_KIND
+{
+    KdpUartPl011,
+    KdpUartSbsa,
+    KdpUart16550
+} KDP_UART_KIND;
+
+static KDP_UART_KIND KdpUartKind = KdpUartPl011;
+static ULONG KdpUartShift;
+static BOOLEAN KdpUartWide;
 
 /* FUNCTIONS *****************************************************************/
 
@@ -95,6 +118,68 @@ KdpFindDbg2Uart(
 }
 
 /**
+ * @brief Finds the UART the device tree names in stdout-path.
+ *
+ * Boards without ACPI have no DBG2, the console the firmware used is the
+ * debug port then.
+ */
+static
+BOOLEAN
+KdpFindFdtUart(
+    _Out_ PULONG64 PhysicalAddress)
+{
+    PHYSICAL_ADDRESS Address;
+    ULONG Size, Pages;
+    const VOID *Value;
+    PVOID Fdt;
+    LONG Node;
+    BOOLEAN Found = FALSE;
+
+    if (!FdtFindLoaderBlob(KeLoaderBlock, &Address, &Size))
+        return FALSE;
+
+    Pages = BYTES_TO_PAGES(Size);
+    Fdt = KdMapPhysicalMemory64(Address, Pages);
+    if (!Fdt)
+        return FALSE;
+
+    if (FdtCheckHeader(Fdt) && (FdtTotalSize(Fdt) <= Size))
+    {
+        Node = FdtStdoutNode(Fdt);
+        if ((Node >= 0) && FdtGetReg(Fdt, Node, 0, PhysicalAddress, NULL))
+        {
+            Found = TRUE;
+            if (FdtIsCompatible(Fdt, Node, "arm,pl011"))
+            {
+                KdpUartKind = KdpUartPl011;
+            }
+            else if (FdtIsCompatible(Fdt, Node, "arm,sbsa-uart"))
+            {
+                KdpUartKind = KdpUartSbsa;
+            }
+            else if (FdtIsCompatible(Fdt, Node, "snps,dw-apb-uart") ||
+                     FdtIsCompatible(Fdt, Node, "ns16550a") ||
+                     FdtIsCompatible(Fdt, Node, "ns16550"))
+            {
+                /* SoC 16550s like the DesignWare one space their registers out */
+                KdpUartKind = KdpUart16550;
+                Value = FdtGetProperty(Fdt, Node, "reg-shift", NULL);
+                KdpUartShift = Value ? FdtRead32(Value) : 0;
+                Value = FdtGetProperty(Fdt, Node, "reg-io-width", NULL);
+                KdpUartWide = Value && (FdtRead32(Value) == 4);
+            }
+            else
+            {
+                Found = FALSE;
+            }
+        }
+    }
+
+    KdUnmapVirtualAddress(Fdt, Pages);
+    return Found;
+}
+
+/**
  * @brief Maps the UART at the top of the HAL range.
  *
  * The loader only maps the port in the user half, which goes away with the
@@ -149,18 +234,20 @@ KdPortInitializeEx(
 
     UNREFERENCED_PARAMETER(ComPortNumber);
 
-    /* There is no fixed port on ARM64, without one from DBG2 nothing gets touched */
+    /* There is no fixed port on ARM64, without one from DBG2 or the device tree nothing gets touched */
     if (PortInformation->Address)
         PhysicalAddress = (ULONG_PTR)PortInformation->Address;
-    else if (!KdpFindDbg2Uart(&PhysicalAddress, &HasControl))
+    else if (KdpFindDbg2Uart(&PhysicalAddress, &HasControl))
+        KdpUartKind = HasControl ? KdpUartPl011 : KdpUartSbsa;
+    else if (!KdpFindFdtUart(&PhysicalAddress))
         return FALSE;
 
     Base = KdpMapUart(PhysicalAddress);
     if (!Base)
         return FALSE;
 
-    /* The firmware already set the line up, only make sure it runs */
-    if (HasControl)
+    /* The firmware already set the line up, only make sure a PL011 runs */
+    if (KdpUartKind == KdpUartPl011)
     {
         WRITE_REGISTER_ULONG((PULONG)(Base + UART_CR),
                              READ_REGISTER_ULONG((PULONG)(Base + UART_CR)) |
@@ -171,6 +258,32 @@ KdPortInitializeEx(
     return TRUE;
 }
 
+static
+UCHAR
+Kdp16550Read(
+    _In_ PUCHAR Base,
+    _In_ ULONG Register)
+{
+    PUCHAR Address = Base + (Register << KdpUartShift);
+
+    return KdpUartWide ? (UCHAR)READ_REGISTER_ULONG((PULONG)Address) : READ_REGISTER_UCHAR(Address);
+}
+
+static
+VOID
+Kdp16550Write(
+    _In_ PUCHAR Base,
+    _In_ ULONG Register,
+    _In_ UCHAR Value)
+{
+    PUCHAR Address = Base + (Register << KdpUartShift);
+
+    if (KdpUartWide)
+        WRITE_REGISTER_ULONG((PULONG)Address, Value);
+    else
+        WRITE_REGISTER_UCHAR(Address, Value);
+}
+
 BOOLEAN
 NTAPI
 KdPortGetByteEx(
@@ -178,6 +291,14 @@ KdPortGetByteEx(
     _Out_ PUCHAR ByteReceived)
 {
     PUCHAR Base = PortInformation->Address;
+
+    if (KdpUartKind == KdpUart16550)
+    {
+        if (!(Kdp16550Read(Base, NS16550_LSR) & NS16550_LSR_DR))
+            return FALSE;
+        *ByteReceived = Kdp16550Read(Base, NS16550_RBR);
+        return TRUE;
+    }
 
     if (READ_REGISTER_ULONG((PULONG)(Base + UART_FR)) & UART_FR_RXFE)
         return FALSE;
@@ -193,6 +314,14 @@ KdPortPutByteEx(
     _In_ UCHAR ByteToSend)
 {
     PUCHAR Base = PortInformation->Address;
+
+    if (KdpUartKind == KdpUart16550)
+    {
+        while (!(Kdp16550Read(Base, NS16550_LSR) & NS16550_LSR_THRE))
+            YieldProcessor();
+        Kdp16550Write(Base, NS16550_THR, ByteToSend);
+        return;
+    }
 
     while (READ_REGISTER_ULONG((PULONG)(Base + UART_FR)) & UART_FR_TXFF)
         YieldProcessor();
