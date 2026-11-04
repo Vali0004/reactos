@@ -943,7 +943,7 @@ UacpiNtIrqLibResolveVector(
         return STATUS_SUCCESS;
     }
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
     /* GIC interrupt IDs are the vectors, so the HAL answers like it does under PIC */
     if (FALSE)
 #else
