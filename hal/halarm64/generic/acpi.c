@@ -255,7 +255,9 @@ HalpAcpiInitialize(
     RootAddress = HalpAcpiFindRootTable(LoaderBlock);
     if (!RootAddress.QuadPart)
     {
-        DPRINT1("No ACPI tables from the loader\n");
+        /* Boards without ACPI describe the same things in a device tree */
+        if (!HalpDtbInitialize(LoaderBlock))
+            DPRINT1("No ACPI tables or device tree from the loader\n");
         return;
     }
 

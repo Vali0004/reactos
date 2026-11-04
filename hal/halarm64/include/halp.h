@@ -140,6 +140,7 @@ typedef struct _HALP_PLATFORM
     ULONG GicrLength;
     PHYSICAL_ADDRESS GiccBase;
     UCHAR GicVersion;
+    PVOID DeviceTree;
     ULONG TimerIntId;
     USHORT ArmBootFlags;
     PHYSICAL_ADDRESS RootTable;
@@ -151,6 +152,19 @@ extern HALP_PLATFORM HalpPlatform;
 extern ULONG HalpBusType;
 extern ULONG64 HalpTimerFrequency;
 extern ULONG64 HalpProcessorMpidr[MAXIMUM_PROCESSORS];
+
+/* dtb.c */
+extern BOOLEAN HalpDeviceTreePlatform;
+
+BOOLEAN
+NTAPI
+HalpDtbInitialize(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+VOID
+NTAPI
+HalpDtbAdjustResourceList(
+    _Inout_ PIO_RESOURCE_REQUIREMENTS_LIST List);
 
 /* acpi.c */
 VOID

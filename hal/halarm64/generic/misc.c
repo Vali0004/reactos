@@ -211,6 +211,8 @@ NTAPI
 HalAdjustResourceList(
     _Inout_ PIO_RESOURCE_REQUIREMENTS_LIST *ResourceList)
 {
-    UNREFERENCED_PARAMETER(ResourceList);
+    /* With ACPI the interrupt arbiter of the ACPI driver routes PCI lines */
+    if (ResourceList && *ResourceList)
+        HalpDtbAdjustResourceList(*ResourceList);
     return STATUS_SUCCESS;
 }
