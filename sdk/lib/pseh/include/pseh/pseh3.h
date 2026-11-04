@@ -17,6 +17,13 @@
 extern "C" {
 #endif
 
+/* i386 passes the frame in registers, the ARM calling convention does already */
+#ifdef _M_IX86
+#define _SEH3$_REGPARM(_N) __attribute__((regparm(_N)))
+#else
+#define _SEH3$_REGPARM(_N)
+#endif
+
 /* CLANG must safe non-volatiles, because it uses a return-twice algorithm */
 #if defined(__clang__) && !defined(_SEH3$_FRAME_ALL_NONVOLATILES)
 #define _SEH3$_FRAME_ALL_NONVOLATILES 1
@@ -53,7 +60,7 @@ typedef struct _SEH3$_REGISTRATION_FRAME
     /* Except handler stores pointer to exception pointers here */
     PSEH3$_EXCEPTION_POINTERS volatile ExceptionPointers;
 
-    /* Registers that we need to save */
+    /* Registers that we need to save, on ARM sp and the r11 frame pointer */
     unsigned long Esp;
     unsigned long Ebp;
 
@@ -61,7 +68,16 @@ typedef struct _SEH3$_REGISTRATION_FRAME
     unsigned long ExceptionCode;
 
     char* AllocaFrame;
-#ifdef _SEH3$_FRAME_ALL_NONVOLATILES
+#ifdef _M_ARM
+    /* the AAPCS non-volatiles besides r11 */
+    unsigned long R4;
+    unsigned long R5;
+    unsigned long R6;
+    unsigned long R7;
+    unsigned long R8;
+    unsigned long R9;
+    unsigned long R10;
+#elif defined(_SEH3$_FRAME_ALL_NONVOLATILES)
     unsigned long Ebx;
     unsigned long Esi;
     unsigned long Edi;
@@ -90,6 +106,29 @@ _SEH3$_except_handler(
 /* Prevent gcc from inlining functions that use SEH. */
 static inline __attribute__((always_inline)) __attribute__((returns_twice)) void _SEH3$_PreventInlining() {}
 
+#ifdef _M_ARM
+
+/* The chain head is NtTib.ExceptionList, in the TEB in user mode and the KPCR in kernel mode */
+volatile SEH3$_REGISTRATION_FRAME **
+_SEH3$_ChainHead(void);
+
+/* Unregister the root frame */
+extern inline __attribute__((always_inline,gnu_inline))
+void _SEH3$_UnregisterFrame(volatile SEH3$_REGISTRATION_FRAME *RegistrationFrame)
+{
+    *_SEH3$_ChainHead() = RegistrationFrame->Next;
+}
+
+/* Unregister a trylevel frame */
+extern inline __attribute__((always_inline,gnu_inline))
+void _SEH3$_UnregisterTryLevel(
+    volatile SEH3$_REGISTRATION_FRAME *TrylevelFrame)
+{
+    (*_SEH3$_ChainHead())->EndOfChain = TrylevelFrame->Next;
+}
+
+#else
+
 /* Unregister the root frame */
 extern inline __attribute__((always_inline,gnu_inline))
 void _SEH3$_UnregisterFrame(volatile SEH3$_REGISTRATION_FRAME *RegistrationFrame)
@@ -109,6 +148,8 @@ void _SEH3$_UnregisterTryLevel(
     RegistrationFrame->EndOfChain = TrylevelFrame->Next;
 }
 
+#endif
+
 enum
 {
     _SEH3$_TryLevel = -1,
@@ -126,7 +167,7 @@ void * __cdecl __attribute__((error("Can only be used inside an exception filter
 #define _SEH3$_AUTO_CLEANUP __attribute__((cleanup(_SEH3$_AutoCleanup)))
 
 int
-__attribute__((regparm(3)))
+_SEH3$_REGPARM(3)
 __attribute__((returns_twice))
 _SEH3$_RegisterFrameWithNonVolatiles(
     volatile SEH3$_REGISTRATION_FRAME* RegistrationFrame,
@@ -134,7 +175,7 @@ _SEH3$_RegisterFrameWithNonVolatiles(
     void* AllocaFrame);
 
 int
-__attribute__((regparm(3)))
+_SEH3$_REGPARM(3)
 __attribute__((returns_twice))
 _SEH3$_RegisterTryLevelWithNonVolatiles(
     volatile SEH3$_REGISTRATION_FRAME* RegistrationFrame,
@@ -145,7 +186,12 @@ _SEH3$_RegisterTryLevelWithNonVolatiles(
 #ifdef __clang__
 
 /* CLANG thinks it is smart and optimizes the alloca away if it is 0 and with it the use of a frame register */
+#ifdef _M_ARM
+/* a live alloca keeps locals addressed from r11, filters run with sp below the dispatcher */
+#define _SEH3$_EnforceFramePointer() asm volatile ("" : : "m"(*(char*)__builtin_alloca(4)) : "memory")
+#else
 #define _SEH3$_EnforceFramePointer() asm volatile ("#\n" : : "m"(*(char*)__builtin_alloca(4)) : "%esp", "memory")
+#endif
 
 /* CLANG doesn't have asm goto! */
 #define _SEH3$_ASM_GOTO(...)
@@ -236,7 +282,7 @@ _SEH3$_RegisterTryLevelWithNonVolatiles(
 
 /* Use the global unregister function */
 void
-__attribute__((regparm(1)))
+_SEH3$_REGPARM(1)
 _SEH3$_AutoCleanup(
     volatile SEH3$_REGISTRATION_FRAME *Frame);
 
@@ -246,23 +292,42 @@ _SEH3$_AutoCleanup(
 #define _SEH3$_DECLARE_FILTER_FUNC(_Name)
 #define _SEH3$_DEFINE_DUMMY_FINALLY(_Name)
 
+#ifdef _M_ARM
+
+/* On invocation, the AllocaFrame field holds the sp of the invoking helper,
+   which returns through _SEH3$_InvokeEmbeddedFilterReturnClang */
+#define _SEH3$_NESTED_FUNC_RETURN(_Result) \
+        asm volatile ("mov r0, %[Result]\n\tldr sp, %[FixedSp]\n\tb _SEH3$_InvokeEmbeddedFilterReturnClang" \
+            : : [Result] "r" (_Result), [FixedSp] "m" (_SEH3$_TrylevelFrame.AllocaFrame) : "memory")
+
+/* Registers hold nothing the compiler may rely on when entering a filter */
+#define _SEH3$_CLOBBER_ALL() \
+        asm volatile ("" : : : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r8", "r9", "r10", "r12", "lr", "cc", "memory")
+
+#else
+
 /* On invocation, the AllocaFrame field is loaded with the return esp value */
 #define _SEH3$_NESTED_FUNC_RETURN(_Result) \
         /* Restore esp and return to the caller */ \
         asm volatile ("movl %[FixedEsp], %%esp\n\tret" \
             : : "a" (_Result), [FixedEsp] "m" (_SEH3$_TrylevelFrame.AllocaFrame) : "ebx", "ecx", "edx", "esi", "edi", "flags", "memory")
 
+#define _SEH3$_CLOBBER_ALL() \
+        asm volatile ("#\n" : : : "eax", "ebx", "ecx", "edx", "esi", "edi", "flags", "memory")
+
+#endif
+
 /* The filter "function" */
 #define _SEH3$_DEFINE_FILTER_FUNC(_Name, expression) \
     { \
         /* Evaluate and return the filter expression */ \
-        asm volatile ("#\n" : : : "eax", "ebx", "ecx", "edx", "esi", "edi", "flags", "memory"); \
+        _SEH3$_CLOBBER_ALL(); \
         _SEH3$_NESTED_FUNC_RETURN((expression)); \
     }
 
 #define _SEH3$_FINALLY_FUNC_OPEN(_Name) \
     { \
-        asm volatile ("#\n" : : : "eax", "ebx", "ecx", "edx", "esi", "edi", "flags", "memory"); \
+        _SEH3$_CLOBBER_ALL(); \
         /* This construct makes sure that the finally function returns */ \
         /* a proper value at the end */ \
         for (; ; (void)({_SEH3$_NESTED_FUNC_RETURN(0); 0;}))
@@ -502,6 +567,7 @@ _Pragma("GCC diagnostic pop") \
 
 #define _SEH3_VOLATILE volatile
 
+#ifdef _M_IX86
 int _setjmp3(jmp_buf env, int count, ...);
 void __stdcall _SEH3$_longjmp_unwind(_JUMP_BUFFER* _Buf);
 
@@ -510,6 +576,7 @@ void __stdcall _SEH3$_longjmp_unwind(_JUMP_BUFFER* _Buf);
     _setjmp3(env, 2, (const void*)_SEH3$_longjmp_unwind, _SEH3$_TryLevel)
 
 #define _INC_SETJMPEX
+#endif
 
 #ifdef __cplusplus
 }; // extern "C"

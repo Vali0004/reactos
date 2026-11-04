@@ -25,7 +25,33 @@
 
 #define __USE_PSEH2__
 
-#if defined(_USE_NATIVE_SEH) || defined(_MSC_VER)
+/* clang has no SEH for 32-bit ARM, PSEH3 builds it from a registration chain */
+#if defined(__clang__) && defined(_M_ARM) && !defined(_USE_NATIVE_SEH) && !defined(_USE_PSEH3)
+#define _USE_PSEH3 1
+#endif
+
+#if defined(_USE_PSEH3) && defined(_M_ARM)
+
+#include "pseh3.h"
+
+#define _SEH2_TRY _SEH3_TRY
+#define _SEH2_EXCEPT _SEH3_EXCEPT
+#define _SEH2_FINALLY _SEH3_FINALLY
+#define _SEH2_END _SEH3_END
+#define _SEH2_GetExceptionInformation() ((struct _EXCEPTION_POINTERS*)_exception_info())
+#define _SEH2_GetExceptionCode _exception_code
+#define _SEH2_AbnormalTermination _abnormal_termination
+#define _SEH2_LEAVE _SEH3_LEAVE
+#define _SEH2_YIELD(x) x
+#define _SEH2_VOLATILE volatile
+
+#define __try _SEH3_TRY
+#define __except _SEH3_EXCEPT
+#define __finally _SEH3_FINALLY
+#define __endtry _SEH3_END
+#define __leave _SEH3_LEAVE
+
+#elif defined(_USE_NATIVE_SEH) || defined(_MSC_VER)
 
 #define _SEH2_TRY __try
 #define _SEH2_FINALLY __finally

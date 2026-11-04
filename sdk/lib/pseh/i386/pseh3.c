@@ -37,7 +37,11 @@
 #include <windef.h>
 #include <winnt.h>
 
+#ifdef _M_ARM
+#define ASSERT(exp) if (!(exp)) __debugbreak();
+#else
 #define ASSERT(exp) if (!(exp)) __int2c();
+#endif
 
 #include "pseh3.h"
 #include "pseh3_asmdef.h"
@@ -53,7 +57,10 @@ C_ASSERT(SEH3_REGISTRATION_FRAME_ExceptionCode == FIELD_OFFSET(SEH3$_REGISTRATIO
 C_ASSERT(SEH3_REGISTRATION_FRAME_Esp == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, Esp));
 C_ASSERT(SEH3_REGISTRATION_FRAME_Ebp == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, Ebp));
 C_ASSERT(SEH3_REGISTRATION_FRAME_AllocaFrame == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, AllocaFrame));
-#ifdef _SEH3$_FRAME_ALL_NONVOLATILES
+#ifdef _M_ARM
+C_ASSERT(SEH3_REGISTRATION_FRAME_R4 == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, R4));
+C_ASSERT(SEH3_REGISTRATION_FRAME_R10 == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, R10));
+#elif defined(_SEH3$_FRAME_ALL_NONVOLATILES)
 C_ASSERT(SEH3_REGISTRATION_FRAME_Ebx == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, Ebx));
 C_ASSERT(SEH3_REGISTRATION_FRAME_Esi == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, Esi));
 C_ASSERT(SEH3_REGISTRATION_FRAME_Edi == FIELD_OFFSET(SEH3$_REGISTRATION_FRAME, Edi));
@@ -72,7 +79,7 @@ enum
 };
 
 void
-__attribute__((regparm(1)))
+_SEH3$_REGPARM(1)
 _SEH3$_Unregister(
     volatile SEH3$_REGISTRATION_FRAME *Frame)
 {
@@ -87,11 +94,19 @@ _SEH3$_Unregister(
         /* During unwinding on Windows ExecuteHandler2 installs its own EH frame,
            so there can be one or even multiple frames before our own one and we
            need to search for the link that points to our head frame. */
+#ifdef _M_ARM
+        CurrentFrame = (SEH3$_REGISTRATION_FRAME*)*_SEH3$_ChainHead();
+#else
         CurrentFrame = (SEH3$_REGISTRATION_FRAME*)__readfsdword(0);
+#endif
         if (Frame == CurrentFrame)
         {
             /* The target frame is the first installed frame, remove it */
+#ifdef _M_ARM
+            *_SEH3$_ChainHead() = Frame->Next;
+#else
             __writefsdword(0, (ULONG)Frame->Next);
+#endif
             return;
         }
 
@@ -121,6 +136,10 @@ _SEH3$_Unregister(
     }
 }
 
+#ifdef _M_ARM
+/* GCC nested functions are not used on ARM, CLANG re-enters the function instead */
+#define _SEH3$_InvokeNestedFunctionFilter(_Frame, _Filter) (EXCEPTION_CONTINUE_SEARCH)
+#else
 static inline
 LONG
 _SEH3$_InvokeNestedFunctionFilter(
@@ -149,14 +168,15 @@ _SEH3$_InvokeNestedFunctionFilter(
 
     return FilterResult;
 }
+#endif /* _M_ARM */
 
 long
-__attribute__((regparm(1)))
+_SEH3$_REGPARM(1)
 _SEH3$_InvokeEmbeddedFilter(
     volatile SEH3$_REGISTRATION_FRAME *RegistrationFrame);
 
 long
-__attribute__((regparm(1)))
+_SEH3$_REGPARM(1)
 _SEH3$_InvokeEmbeddedFilterFromRegistration(
     volatile SEH3$_REGISTRATION_FRAME *RegistrationFrame);
 
@@ -175,8 +195,13 @@ _SEH3$_InvokeFilter(
     }
     else if (HandlerType == _SEH3$_CPP_HANDLER)
     {
+#ifdef _M_ARM
+        /* C++ uses the same re-entry as C with CLANG on ARM */
+        return _SEH3$_InvokeEmbeddedFilterFromRegistration(RegistrationFrame);
+#else
         /* Call the embedded filter function */
         return _SEH3$_InvokeEmbeddedFilter(RegistrationFrame);
+#endif
     }
     else if (HandlerType == _SEH3$_CLANG_HANDLER)
     {
@@ -192,7 +217,7 @@ _SEH3$_InvokeFilter(
 }
 
 void
-__attribute__((regparm(1)))
+_SEH3$_REGPARM(1)
 _SEH3$_C_AutoCleanup(
     volatile SEH3$_REGISTRATION_FRAME *Frame)
 {
@@ -210,7 +235,7 @@ _SEH3$_C_AutoCleanup(
 }
 
 void
-__attribute__((regparm(1)))
+_SEH3$_REGPARM(1)
 _SEH3$_CPP_AutoCleanup(
     volatile SEH3$_REGISTRATION_FRAME *Frame)
 {
@@ -263,6 +288,13 @@ _SEH3$_CallFinally(
     _SEH3$_InvokeFilter(Record, Record->ScopeTable->Filter, HandlerType);
 }
 
+#ifdef _M_ARM
+/* pseh3_arm.S, resumes the function behind its registration with result 2 */
+__attribute__((noreturn))
+void
+_SEH3$_JumpToTarget(
+    PSEH3$_REGISTRATION_FRAME RegistrationFrame);
+#else
 __attribute__((noreturn))
 static inline
 void
@@ -309,11 +341,23 @@ _SEH3$_JumpToTarget(
 
     __builtin_unreachable();
 }
+#endif /* _M_ARM */
 
+#ifdef _M_ARM
+/* RtlUnwind keeps the non-volatiles per the calling convention, a plain call does */
+static
+void
+_SEH3$_CallRtlUnwind(
+    PSEH3$_REGISTRATION_FRAME RegistrationFrame)
+{
+    RtlUnwind((PVOID)RegistrationFrame, NULL, NULL, NULL);
+}
+#else
 void
 __fastcall
 _SEH3$_CallRtlUnwind(
     PSEH3$_REGISTRATION_FRAME RegistrationFrame);
+#endif
 
 
 int // EXCEPTION_DISPOSITION
@@ -332,8 +376,10 @@ _SEH3$_common_except_handler(
     SEH3$_EXCEPTION_POINTERS ExceptionPointers;
     LONG FilterResult;
 
+#ifndef _M_ARM
     /* Clear the direction flag. */
     asm volatile ("cld" : : : "memory");
+#endif
 
     /* Save the exception pointers on the stack */
     ExceptionPointers.ExceptionRecord = ExceptionRecord;
@@ -448,6 +494,7 @@ _SEH3$_CPP_except_handler(
     return _SEH3$_common_except_handler(ExceptionRecord, EstablisherFrame, ContextRecord, DispatcherContext, _SEH3$_CPP_HANDLER);
 }
 
+#ifdef _M_IX86
 void
 __stdcall
 _SEH3$_longjmp_unwind(_JUMP_BUFFER* _Buf)
@@ -493,3 +540,4 @@ _SEH3$_longjmp_unwind(_JUMP_BUFFER* _Buf)
         }
     }
 }
+#endif /* _M_IX86 */
