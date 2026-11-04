@@ -3,6 +3,8 @@
 
 #include <ksarm.h>
 
+#ifdef _MSC_VER
+
     GBLA SyscallId
 
 SyscallId SETA 0
@@ -45,6 +47,50 @@ $ZwFuncName
 $NtFuncEndName
 $ZwFuncEndName
     MEND
+
+    MACRO
+    SYSCALL_BASE $Base
+SyscallId SETA $Base
+    MEND
+
+#else
+
+.set SyscallId, 0
+
+.macro STUB_U Name
+    .global Nt\Name
+    .global Zw\Name
+    .p2align 2
+    .thumb_func
+Nt\Name:
+    .thumb_func
+Zw\Name:
+    movw r12, #SyscallId
+    svc #1
+    bx lr
+    .set SyscallId, SyscallId + 1
+.endm
+
+.macro STUB_K Name
+    .global Zw\Name
+    .p2align 2
+    .thumb_func
+Zw\Name:
+    movw r12, #SyscallId
+    svc #1
+    bx lr
+    .set SyscallId, SyscallId + 1
+.endm
+
+.macro SKIP_STUB Name
+    .set SyscallId, SyscallId + 1
+.endm
+
+.macro SYSCALL_BASE Base
+    .set SyscallId, \Base
+.endm
+
+#endif
 
 #elif defined(_M_ARM64)
 

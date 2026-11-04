@@ -1,14 +1,18 @@
 
 #include <syscalls.inc>
 
-#ifdef _M_ARM64
+#if defined(_M_ARM64) || defined(_M_ARM)
 
     TEXTAREA
 
     SYSCALL_BASE 0x1000
 #define SVC_(name, argcount) STUB_U name
 
+#ifdef _M_ARM64
 #include <w32ksvc64.h>
+#else
+#include <w32ksvc32.h>
+#endif
 
     END
 
