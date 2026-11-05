@@ -114,7 +114,10 @@ foreach(_keyboard_layout ${_keyboard_layouts})
     endif()
     set_subsystem(${_keyboard_layout} native)
 
-    if(MSVC)
+    if(MSVC AND ARCH STREQUAL "arm")
+        # lld gives every address in an executable section the thumb bit, so the code stays apart from the tables
+        target_link_options(${_keyboard_layout} PRIVATE "/ignore:4254;/MERGE:.rdata=.data;/MERGE:.bss=.data;/MERGE:.edata=.data")
+    elseif(MSVC)
         # Merge the .text and .rdata section into the .data section
         target_link_options(${_keyboard_layout} PRIVATE "/ignore:4254;/SECTION:.data,ER;/MERGE:.text=.data;/MERGE:.rdata=.data;/MERGE:.bss=.data;/MERGE:.edata=.data")
     else()
