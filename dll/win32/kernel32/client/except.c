@@ -706,6 +706,17 @@ Quit:
 /*
  * @implemented
  */
+#ifdef _M_ARM
+/* the RaiseException entry in arm/except.S records the caller's context and lands here */
+VOID
+WINAPI
+BaseRaiseExceptionWithContext(
+    _In_ DWORD dwExceptionCode,
+    _In_ DWORD dwExceptionFlags,
+    _In_ DWORD nNumberOfArguments,
+    _In_opt_ const ULONG_PTR *lpArguments,
+    _In_ PCONTEXT Context)
+#else
 VOID
 WINAPI
 RaiseException(
@@ -713,6 +724,7 @@ RaiseException(
     _In_ DWORD dwExceptionFlags,
     _In_ DWORD nNumberOfArguments,
     _In_opt_ const ULONG_PTR *lpArguments)
+#endif
 {
     EXCEPTION_RECORD ExceptionRecord;
 
@@ -720,7 +732,11 @@ RaiseException(
     RtlZeroMemory(&ExceptionRecord, sizeof(ExceptionRecord));
     ExceptionRecord.ExceptionCode = dwExceptionCode;
     ExceptionRecord.ExceptionRecord = NULL;
+#ifdef _M_ARM
+    ExceptionRecord.ExceptionAddress = (PVOID)Context->Pc;
+#else
     ExceptionRecord.ExceptionAddress = (PVOID)RaiseException;
+#endif
     ExceptionRecord.ExceptionFlags = dwExceptionFlags & EXCEPTION_NONCONTINUABLE;
 
     /* Check if we have arguments */
@@ -751,7 +767,11 @@ RaiseException(
     }
 
     /* Raise the exception */
+#ifdef _M_ARM
+    NtRaiseException(&ExceptionRecord, Context, TRUE);
+#else
     RtlRaiseException(&ExceptionRecord);
+#endif
 }
 
 /*

@@ -80,5 +80,28 @@
     bx      lr
     LEAF_END RtlCaptureContext
 
+//
+// VOID RtlpRestoreContext(PCONTEXT ContextRecord)
+//
+// loads the registers of the context and resumes at its pc in thumb state,
+// r0 and pc go through the target stack so every other register is free
+//
+    LEAF_ENTRY RtlpRestoreContext
+    add     r1, r0, #CxD
+    vldm    r1, {d0-d15}
+    ldr     r1, [r0, #CxFpscr]
+    vmsr    fpscr, r1
+    ldr     r1, [r0, #CxSp]
+    ldr     r2, [r0, #CxR0]
+    ldr     r3, [r0, #CxPc]
+    orr     r3, r3, #1
+    stmdb   r1!, {r2, r3}
+    mov     sp, r1
+    ldr     lr, [r0, #CxLr]
+    add     r1, r0, #CxR1
+    ldm     r1, {r1-r12}
+    pop     {r0, pc}
+    LEAF_END RtlpRestoreContext
+
     END
 /* EOF */

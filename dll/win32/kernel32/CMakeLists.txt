@@ -127,6 +127,7 @@ elseif(ARCH STREQUAL "amd64")
         client/amd64/fiber.S)
 elseif(ARCH STREQUAL "arm")
     list(APPEND ASM_SOURCE
+        client/arm/except.S
         client/arm/fiber.S
         client/arm/thread.S)
 elseif(ARCH STREQUAL "arm64")
