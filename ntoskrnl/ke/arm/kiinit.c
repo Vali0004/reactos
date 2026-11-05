@@ -242,6 +242,27 @@ KiSystemStartupBootStack(VOID)
     KiIdleLoop();
 }
 
+/* ID_PFR1 bits 19:16 report the generic timer, without one the pmu cycle counter is started */
+CODE_SEG("INIT")
+static
+VOID
+KiArmDetectCycleCounter(VOID)
+{
+    ULONG Pfr1, Pmcr;
+
+    __asm__ __volatile__("mrc p15, 0, %0, c0, c1, 1" : "=r" (Pfr1));
+    KiArmHasGenericTimer = ((Pfr1 >> 16) & 0xF) != 0;
+    if (KiArmHasGenericTimer)
+        return;
+
+    /* enable and reset the counters, then count cycles */
+    __asm__ __volatile__("mrc p15, 0, %0, c9, c12, 0" : "=r" (Pmcr));
+    Pmcr |= 0x1 | 0x4;
+    __asm__ __volatile__("mcr p15, 0, %0, c9, c12, 0" : : "r" (Pmcr));
+    __asm__ __volatile__("mcr p15, 0, %0, c9, c12, 1" : : "r" (0x80000000));
+    KiEarlyTrace("KiSystemStartup: no generic timer, cycles come from the pmu\n");
+}
+
 CODE_SEG("INIT")
 DECLSPEC_NORETURN
 VOID
@@ -255,6 +276,9 @@ KiSystemStartup(
 
     FrLdrDbgPrint = LoaderBlock->u.I386.CommonDataArea;
     KiEarlyTrace("KiSystemStartup: loader block %p\n", LoaderBlock);
+
+    /* the cycle count is read from here on, so the timer it comes from is settled first */
+    KiArmDetectCycleCounter();
 
     Cpu = KeNumberProcessors++;
 

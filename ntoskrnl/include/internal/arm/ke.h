@@ -4,12 +4,21 @@
 
 #define KiServiceExit2 KiExceptionExit
 
-/* the virtual count of the ARMv7 generic timer */
+/* set at startup, cortex-a8 class cores have no generic timer */
+extern BOOLEAN KiArmHasGenericTimer;
+
+/* the virtual count of the generic timer, the pmu cycle counter where there is none */
 FORCEINLINE
 ULONG64
 KxQueryProcessorCycleTime(VOID)
 {
     ULONG Low, High;
+
+    if (!KiArmHasGenericTimer)
+    {
+        __asm__ __volatile__("mrc p15, 0, %0, c9, c13, 0" : "=r" (Low));
+        return Low;
+    }
 
     __asm__ __volatile__("mrrc p15, 1, %0, %1, c14" : "=r" (Low), "=r" (High));
     return ((ULONG64)High << 32) | Low;

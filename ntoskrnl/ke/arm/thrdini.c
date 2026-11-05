@@ -43,6 +43,9 @@ C_ASSERT(FIELD_OFFSET(KUINIT_FRAME, TrapFrame) ==
 C_ASSERT((sizeof(KUINIT_FRAME) % 8) == 0);
 C_ASSERT((sizeof(KKINIT_FRAME) % 8) == 0);
 
+/* cortex-a8 class cores have no generic timer, set once at startup */
+BOOLEAN KiArmHasGenericTimer;
+
 /* FUNCTIONS *****************************************************************/
 
 VOID

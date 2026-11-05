@@ -18,6 +18,30 @@
 /* GLOBALS *******************************************************************/
 
 ULONG64 HalpTimerFrequency;
+
+#ifdef _M_ARM
+/* cortex-a8 class cores have no generic timer, they wait for an extension timer */
+static BOOLEAN HalpNoGenericTimer;
+
+static
+BOOLEAN
+HalpHasGenericTimer(VOID)
+{
+    static BOOLEAN Checked;
+    ULONG Pfr1;
+
+    if (!Checked)
+    {
+        __asm__ __volatile__("mrc p15, 0, %0, c0, c1, 1" : "=r" (Pfr1));
+        HalpNoGenericTimer = ((Pfr1 >> 16) & 0xF) == 0;
+        Checked = TRUE;
+    }
+
+    return !HalpNoGenericTimer;
+}
+#else
+#define HalpHasGenericTimer() TRUE
+#endif
 static ULONG64 HalpClockPeriod;
 static ULONG HalpCurrentTimeIncrement = HALP_CLOCK_INCREMENT;
 static KINTERRUPT HalpClockInterrupt;
@@ -30,6 +54,17 @@ HalpReadCounter(VOID)
 {
     if (HalpExtTimer)
         return HalpExtReadCounter();
+
+#ifdef _M_ARM
+    /* the pmu cycle counter the kernel started, only until a real timer is picked */
+    if (!HalpHasGenericTimer())
+    {
+        ULONG Cycles;
+
+        __asm__ __volatile__("mrc p15, 0, %0, c9, c13, 0" : "=r" (Cycles));
+        return Cycles;
+    }
+#endif
 
     __isb(_ARM64_BARRIER_SY);
     return KeArm64ReadRegister(ARM64_CNTVCT);
@@ -53,6 +88,10 @@ HalpInitializeClock(VOID)
         KeSetTimeIncrement(HALP_CLOCK_INCREMENT, HALP_CLOCK_INCREMENT);
         return;
     }
+
+    /* no extension timer and no generic timer leaves nothing to keep time with */
+    if (!HalpHasGenericTimer())
+        KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x7173, 4, 0, 0);
 
     HalpTimerFrequency = KeArm64ReadRegister(ARM64_CNTFRQ_EL0) & 0xFFFFFFFF;
     if (!HalpTimerFrequency)
@@ -124,6 +163,16 @@ KeStallExecutionProcessor(
     _In_ ULONG MicroSeconds)
 {
     ULONG64 Start, Ticks;
+
+    /* before a timer is known the wait is a rough spin */
+    if (!HalpExtTimer && !HalpHasGenericTimer())
+    {
+        volatile ULONG Spin;
+
+        for (Spin = 0; Spin < MicroSeconds * 200; Spin++)
+            YieldProcessor();
+        return;
+    }
 
     Ticks = ((ULONG64)MicroSeconds * HalpTimerFrequency + 999999) / 1000000;
     Start = HalpReadCounter();
