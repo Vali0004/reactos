@@ -76,4 +76,27 @@ MiArmSyncL1(
     }
 }
 
+/* a kernel fault on an address whose pde this process' first level table lacks
+ * returns TRUE once the pde is mirrored and the access can be retried */
+BOOLEAN
+NTAPI
+MiArmFixKernelL1(
+    _In_ PVOID Address)
+{
+    PMMPDE PointerPde = MiAddressToPde(Address);
+    PULONG L1 = MI_ARM_L1_TABLE + ((ULONG_PTR)Address >> 20);
+    ULONG Expected;
+
+    if (!PointerPde->u.Hard.Valid)
+        return MiSynchronizeSystemPde(PointerPde);
+
+    Expected = (PFN_FROM_PTE(PointerPde) << PAGE_SHIFT) | MI_ARM_L1_COARSE_TABLE;
+    Expected += (((ULONG_PTR)Address >> 20) & ((PDE_MAPPED_VA / _1MB) - 1)) * MI_ARM_COARSE_TABLE_SIZE;
+    if (*L1 == Expected)
+        return FALSE;
+
+    MiArmSyncL1(PointerPde);
+    return TRUE;
+}
+
 /* EOF */

@@ -227,3 +227,9 @@ VOID
 NTAPI
 MiArmSyncL1(
     _In_ PMMPDE PointerPde);
+
+/* repairs a kernel pde missing from the first level table on a fault, mm/arm/l1.c */
+BOOLEAN
+NTAPI
+MiArmFixKernelL1(
+    _In_ PVOID Address);

@@ -236,6 +236,10 @@ MmAccessFault(IN ULONG FaultCode,
             /* All is well with the world */
             return STATUS_SUCCESS;
         }
+#elif defined(_M_ARM)
+        /* the software directory can be ahead of this process' first level table */
+        if (MiArmFixKernelL1(Address))
+            return STATUS_SUCCESS;
 #endif
     }
 
