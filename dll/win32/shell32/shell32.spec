@@ -555,7 +555,7 @@
 @ stdcall SHGetNewLinkInfo(str str ptr long long) SHGetNewLinkInfoA # 2k3:312, Vista:379
 @ stdcall SHGetPathFromIDList(ptr ptr) SHGetPathFromIDListA # 2k3:313, Vista:380
 @ stdcall SHGetPathFromIDListA(ptr ptr) # 2k3:314, Vista:381
-@ stub -version=0x600+ SHGetPathFromIDListEx # Vista:382
+@ stdcall SHGetPathFromIDListEx(ptr ptr long long)
 @ stdcall SHGetPathFromIDListW(ptr ptr) # 2k3:315, Vista:383
 @ stub -version=0x600+ SHGetPropertyStoreFromIDList # Vista:384
 @ stdcall -version=0x600+ SHGetPropertyStoreFromParsingName(wstr ptr ptr ptr ptr) # Vista:385
