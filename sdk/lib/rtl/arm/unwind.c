@@ -233,6 +233,114 @@ RtlpArmExecuteCodes(
     return TRUE;
 }
 
+/* bytes of the instruction an unwind code stands for, 0 for the end code */
+static
+ULONG
+RtlpArmCodeInstructionSize(
+    _In_ UCHAR Code)
+{
+    if (Code <= 0x7F) return 2;
+    if (Code <= 0xBF) return 4;
+    if (Code <= 0xCF) return 2;
+    if (Code <= 0xD7) return 2;
+    if (Code <= 0xEB) return 4;
+    if (Code <= 0xEE) return 2;
+    if (Code == 0xEF) return 4;
+    if (Code <= 0xF6) return 4;
+    if (Code <= 0xF8) return 2;
+    if (Code <= 0xFA) return 4;
+    if (Code == 0xFB) return 2;
+    if (Code == 0xFC) return 4;
+    if (Code == 0xFD) return 2;
+    if (Code == 0xFE) return 4;
+    return 0;
+}
+
+/* bytes the code takes in the stream */
+static
+ULONG
+RtlpArmCodeLength(
+    _In_ UCHAR Code)
+{
+    if ((Code >= 0x80 && Code <= 0xBF) || (Code >= 0xE8 && Code <= 0xEF) || Code == 0xF5 || Code == 0xF6)
+        return 2;
+    if (Code == 0xF7 || Code == 0xF9)
+        return 3;
+    if (Code == 0xF8 || Code == 0xFA)
+        return 4;
+    return 1;
+}
+
+/* walks the codes from Start to the end code, returns how many and their instruction bytes */
+static
+ULONG
+RtlpArmCountCodes(
+    _In_ PUCHAR Codes,
+    _In_ ULONG Size,
+    _In_ ULONG Start,
+    _Out_opt_ PULONG Sizes,
+    _In_ ULONG MaxSizes,
+    _Out_ PULONG Bytes)
+{
+    ULONG i = Start, Count = 0;
+
+    *Bytes = 0;
+    while (i < Size)
+    {
+        UCHAR Code = Codes[i];
+        ULONG Length = RtlpArmCodeInstructionSize(Code);
+
+        if (Code == 0xFF)
+            break;
+        if (Sizes && Count < MaxSizes)
+            Sizes[Count] = Length;
+        Count++;
+        *Bytes += Length;
+        if (Code >= 0xFD)
+            break;
+        i += RtlpArmCodeLength(Code);
+    }
+
+    return Count;
+}
+
+/* the index of the code Skip codes after Start */
+static
+ULONG
+RtlpArmSkipCodes(
+    _In_ PUCHAR Codes,
+    _In_ ULONG Size,
+    _In_ ULONG Start,
+    _In_ ULONG Skip)
+{
+    while (Skip-- && Start < Size && Codes[Start] < 0xFD)
+        Start += RtlpArmCodeLength(Codes[Start]);
+
+    return Start;
+}
+
+/* inside an epilog the instructions run in code order, skip the ones done */
+static
+ULONG
+RtlpArmEpilogStart(
+    _In_ PUCHAR Codes,
+    _In_ ULONG Size,
+    _In_ ULONG Start,
+    _In_ ULONG Done)
+{
+    while (Start < Size && Codes[Start] < 0xFD)
+    {
+        ULONG Length = RtlpArmCodeInstructionSize(Codes[Start]);
+
+        if (Done < Length)
+            break;
+        Done -= Length;
+        Start += RtlpArmCodeLength(Codes[Start]);
+    }
+
+    return Start;
+}
+
 /* undoes a packed prolog, the pc is taken to be past it in the body */
 static
 VOID
@@ -282,14 +390,14 @@ RtlVirtualUnwind(
 {
     PARM_PDATA_ENTRY Entry = FunctionEntry;
     PEXCEPTION_ROUTINE Handler = NULL;
-    BOOLEAN PcRestored;
+    BOOLEAN PcRestored, InBody = TRUE;
+    ULONG Start = 0;
     PULONG Xdata;
     ULONG Header, EpilogCount, CodeWords;
     PULONG Scopes;
     PUCHAR Codes;
 
     UNREFERENCED_PARAMETER(HandlerType);
-    UNREFERENCED_PARAMETER(ControlPc);
     UNREFERENCED_PARAMETER(ContextPointers);
 
     *HandlerData = NULL;
@@ -324,13 +432,61 @@ RtlVirtualUnwind(
         /* with E set the count is the code index of the only epilog, no scope words follow */
         Codes = (PUCHAR)((Header & (1 << 21)) ? Scopes : Scopes + EpilogCount);
 
-        if (!RtlpArmExecuteCodes(Context, Codes, CodeWords * 4, 0, &PcRestored))
+        /* inside the prolog only what already ran is undone, inside an epilog what is left */
+        {
+            ULONG Offset = (ULONG)((ControlPc & ~1) - ImageBase - (Entry->BeginAddress & ~1));
+            ULONG Length = (Header & 0x3FFFF) * 2;
+            ULONG Size = CodeWords * 4, Bytes, Count, Ran, i;
+            ULONG Sizes[32];
+
+            Count = RtlpArmCountCodes(Codes, Size, 0, Sizes, RTL_NUMBER_OF(Sizes), &Bytes);
+            if (Offset < Bytes && Count <= RTL_NUMBER_OF(Sizes))
+            {
+                /* the prolog runs the codes backwards, count from the last one */
+                for (Ran = 0, i = Count; i > 0 && Offset >= Sizes[i - 1]; i--)
+                {
+                    Offset -= Sizes[i - 1];
+                    Ran++;
+                }
+                Start = RtlpArmSkipCodes(Codes, Size, 0, Count - Ran);
+                InBody = FALSE;
+            }
+            else if (Header & (1 << 21))
+            {
+                ULONG Index = EpilogCount;
+
+                RtlpArmCountCodes(Codes, Size, Index, NULL, 0, &Bytes);
+                if (Offset >= Length - Bytes)
+                {
+                    Start = RtlpArmEpilogStart(Codes, Size, Index, Offset - (Length - Bytes));
+                    InBody = FALSE;
+                }
+            }
+            else
+            {
+                for (i = 0; i < EpilogCount; i++)
+                {
+                    ULONG EpilogOffset = (Scopes[i] & 0x3FFFF) * 2;
+                    ULONG Index = Scopes[i] >> 24;
+
+                    RtlpArmCountCodes(Codes, Size, Index, NULL, 0, &Bytes);
+                    if (Offset >= EpilogOffset && Offset < EpilogOffset + Bytes)
+                    {
+                        Start = RtlpArmEpilogStart(Codes, Size, Index, Offset - EpilogOffset);
+                        InBody = FALSE;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!RtlpArmExecuteCodes(Context, Codes, CodeWords * 4, Start, &PcRestored))
         {
             Context->Pc = 0;
             return NULL;
         }
 
-        if (Header & (1 << 20))
+        if (InBody && (Header & (1 << 20)))
         {
             PULONG HandlerRva = (PULONG)(Codes + CodeWords * 4);
 
