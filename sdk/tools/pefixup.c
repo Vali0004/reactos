@@ -425,6 +425,23 @@ static int fix_arm_local_imports(unsigned char *buffer, PIMAGE_NT_HEADERS nt_hea
  * lld 21 sets the thumb bit on every arm export rva, forwarder strings too.
  * a string has a NUL before it, a non-NUL byte there means the bit is bogus.
  */
+static int rva_in_code_section(PIMAGE_NT_HEADERS nt_header, DWORD rva)
+{
+    PIMAGE_SECTION_HEADER section = IMAGE_FIRST_SECTION(nt_header);
+    unsigned int i;
+
+    for (i = 0; i < nt_header->FileHeader.NumberOfSections; i++, section++)
+    {
+        if ((rva >= section->VirtualAddress) &&
+            (rva < section->VirtualAddress + section->Misc.VirtualSize))
+        {
+            return (section->Characteristics & IMAGE_SCN_CNT_CODE) != 0;
+        }
+    }
+
+    return 0;
+}
+
 static int fix_arm_forwarders(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header)
 {
     PIMAGE_DATA_DIRECTORY dir;
@@ -450,6 +467,14 @@ static int fix_arm_forwarders(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header
     for (i = 0; i < exports->NumberOfFunctions; i++)
     {
         rva = functions[i];
+
+        /* a function exported as data lost its thumb bit, code sections only hold thumb code */
+        if (rva && !(rva & 1) && rva_in_code_section(nt_header, rva))
+        {
+            functions[i] = rva | 1;
+            continue;
+        }
+
         if (!(rva & 1) || (rva <= dir->VirtualAddress) || (rva >= dir->VirtualAddress + dir->Size))
             continue;
 
