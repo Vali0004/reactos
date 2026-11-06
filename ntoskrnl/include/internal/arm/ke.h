@@ -4,6 +4,46 @@
 
 #define KiServiceExit2 KiExceptionExit
 
+/* drops every translation and the branch predictor, the broadcast forms need the mp extensions */
+FORCEINLINE
+VOID
+KiArmFlushTlbAll(VOID)
+{
+    ULONG Mmfr3;
+
+    __asm__ __volatile__("mrc p15, 0, %0, c0, c1, 7" : "=r" (Mmfr3));
+    if (((Mmfr3 >> 12) & 0xF) >= 2)
+    {
+        _MoveToCoprocessor(0, 15, 0, 8, 3, 0);    /* TLBIALLIS */
+        _MoveToCoprocessor(0, 15, 0, 7, 1, 6);    /* BPIALLIS */
+    }
+    else
+    {
+        _MoveToCoprocessor(0, 15, 0, 8, 7, 0);    /* TLBIALL */
+        _MoveToCoprocessor(0, 15, 0, 7, 5, 6);    /* BPIALL */
+    }
+}
+
+/* drops the instruction cache and the branch predictor, broadcast where the core can */
+FORCEINLINE
+VOID
+KiArmSweepIcache(VOID)
+{
+    ULONG Mmfr3;
+
+    __asm__ __volatile__("mrc p15, 0, %0, c0, c1, 7" : "=r" (Mmfr3));
+    if (((Mmfr3 >> 12) & 0xF) >= 1)
+    {
+        _MoveToCoprocessor(0, 15, 0, 7, 1, 0);    /* ICIALLUIS */
+        _MoveToCoprocessor(0, 15, 0, 7, 1, 6);    /* BPIALLIS */
+    }
+    else
+    {
+        _MoveToCoprocessor(0, 15, 0, 7, 5, 0);    /* ICIALLU */
+        _MoveToCoprocessor(0, 15, 0, 7, 5, 6);    /* BPIALL */
+    }
+}
+
 /* set at startup, cortex-a8 class cores have no generic timer */
 extern BOOLEAN KiArmHasGenericTimer;
 extern BOOLEAN KiArmVfpD32;

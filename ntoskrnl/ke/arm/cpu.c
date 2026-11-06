@@ -222,8 +222,7 @@ KeFlushIoBuffers(
     }
 
     /* the I-cache and branch predictor forget whatever they held for these pages */
-    _MoveToCoprocessor(0, 15, 0, 7, 1, 0);                   /* ICIALLUIS */
-    _MoveToCoprocessor(0, 15, 0, 7, 1, 6);                   /* BPIALLIS */
+    KiArmSweepIcache();
     __dsb(_ARM_BARRIER_ISH);
     __isb(_ARM_BARRIER_SY);
 }

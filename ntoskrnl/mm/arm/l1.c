@@ -70,7 +70,7 @@ MiArmSyncL1(
 
         /* the range may have live translations, drop them everywhere */
         __dsb(_ARM_BARRIER_ISHST);
-        _MoveToCoprocessor(0, 15, 0, 8, 3, 0); /* TLBIALLIS */
+        KiArmFlushTlbAll();
         __dsb(_ARM_BARRIER_ISH);
         __isb(_ARM_BARRIER_SY);
     }

@@ -17,8 +17,18 @@
     LEAF_ENTRY HalpFlushTbEntry
     bfc     r0, #0, #12
     dsb     ishst
+    /* without the mp extensions the broadcast forms are undefined, ID_MMFR3 says */
+    mrc     p15, 0, r1, c0, c1, 7       // ID_MMFR3
+    ubfx    r1, r1, #12, #4
+    cmp     r1, #2
+    blo     HalpFlushTbLocal
     mcr     p15, 0, r0, c8, c3, 3       // TLBIMVAAIS
     mcr     p15, 0, r0, c7, c1, 6       // BPIALLIS
+    b       HalpFlushTbDone
+LABEL(HalpFlushTbLocal)
+    mcr     p15, 0, r0, c8, c7, 1       // TLBIMVA, hal mappings are global
+    mcr     p15, 0, r0, c7, c5, 6       // BPIALL
+LABEL(HalpFlushTbDone)
     dsb     ish
     isb
     bx      lr
@@ -157,8 +167,16 @@ LABEL(HalSweepDcacheFinished)
     LEAF_ENTRY HalSweepIcache
     movs    r0, #0
     dsb     ish
+    mrc     p15, 0, r1, c0, c1, 7       // ID_MMFR3, broadcast needs the mp extensions
+    ubfx    r1, r1, #12, #4
+    cbz     r1, HalSweepIcacheLocal
     mcr     p15, 0, r0, c7, c1, 0       // ICIALLUIS
     mcr     p15, 0, r0, c7, c1, 6       // BPIALLIS
+    b       HalSweepIcacheDone
+LABEL(HalSweepIcacheLocal)
+    mcr     p15, 0, r0, c7, c5, 0       // ICIALLU
+    mcr     p15, 0, r0, c7, c5, 6       // BPIALL
+LABEL(HalSweepIcacheDone)
     dsb     ish
     isb
     bx      lr

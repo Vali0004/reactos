@@ -662,8 +662,7 @@ KiSwapProcess(
     __isb(_ARM_BARRIER_SY);
 
     /* no ASIDs yet, every user translation goes */
-    _MoveToCoprocessor(0, 15, 0, 8, 3, 0);            /* TLBIALLIS */
-    _MoveToCoprocessor(0, 15, 0, 7, 1, 6);            /* BPIALLIS */
+    KiArmFlushTlbAll();
     __dsb(_ARM_BARRIER_ISH);
     __isb(_ARM_BARRIER_SY);
 }
