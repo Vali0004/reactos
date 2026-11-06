@@ -117,6 +117,13 @@ HalpParseMadt(
                 if (!(Gicc->Flags & 1) || (Cpu >= MAXIMUM_PROCESSORS))
                     break;
 
+                /* acpi 5.0 entries end before the base and mpidr, the tegra 3 has them */
+                if (Entry->Length < RTL_SIZEOF_THROUGH_FIELD(HALP_MADT_GICC, Mpidr))
+                {
+                    HalpProcessorMpidr[Cpu++] = Gicc->CpuInterfaceNumber;
+                    break;
+                }
+
                 HalpProcessorMpidr[Cpu++] = Gicc->Mpidr;
 
                 /* GICv2 has one CPU interface address, banked per processor */
@@ -141,6 +148,10 @@ HalpParseMadt(
 
         Current += Entry->Length;
     }
+
+    /* gicc entries without a base leave it to the table header */
+    if (!HalpPlatform.GiccBase.QuadPart)
+        HalpPlatform.GiccBase.QuadPart = Madt->LocalInterruptControllerAddress;
 }
 
 /* The loader hands over the XSDT when there is one, the RSDT otherwise */
