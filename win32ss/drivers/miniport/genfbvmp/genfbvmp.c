@@ -1550,7 +1550,7 @@ DriverEntry(
     VideoPortZeroMemory(&VideoInitData, sizeof(VideoInitData));
 
     if ((OsMajorVersion < 3) || // Windows NT 3.1
-        (OsMajorVersion == 3) && (OsMinorVersion < 5))
+        ((OsMajorVersion == 3) && (OsMinorVersion < 5)))
     {
         // RTL_SIZEOF_THROUGH_FIELD(VIDEO_HW_INITIALIZATION_DATA, StartingDeviceNumber);
         VideoInitData.HwInitDataSize = FIELD_OFFSET(VIDEO_HW_INITIALIZATION_DATA, HwResetHw);
@@ -1559,7 +1559,7 @@ DriverEntry(
     {
         VideoInitData.HwInitDataSize = RTL_SIZEOF_THROUGH_FIELD(VIDEO_HW_INITIALIZATION_DATA, HwTimer);
     }
-    else if ((OsMajorVersion == 3) && (OsMinorVersion > 5) || // Windows NT 3.51
+    else if (((OsMajorVersion == 3) && (OsMinorVersion > 5)) || // Windows NT 3.51
              (OsMajorVersion == 4)) // Windows NT 4.x
     {
         VideoInitData.HwInitDataSize = SIZE_OF_NT4_VIDEO_HW_INITIALIZATION_DATA;

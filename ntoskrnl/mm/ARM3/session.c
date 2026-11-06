@@ -485,11 +485,7 @@ MiSessionInitializeWorkingSetList(VOID)
     {
         /* Nope, we'll have to do it */
 #if !defined(_M_ARM) && !defined(_M_ARM64)
-#ifdef _M_ARM
-        ASSERT(PointerPde->u.Hard.NonGlobal == 1);
-#else
         ASSERT(PointerPde->u.Hard.Global == 0);
-#endif
 #endif
         AllocatedPageTable = FALSE;
     }
