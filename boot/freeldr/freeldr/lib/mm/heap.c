@@ -565,6 +565,14 @@ MmInitializeHeap(PVOID PageLookupTable)
 
     /* Create the default heap */
     FrLdrDefaultHeap = FrLdrHeapCreate(DEFAULT_HEAP_SIZE, LoaderOsloaderHeap);
+#ifdef FREELDR_MEMMAP_DIAG
+    if (FrLdrDefaultHeap == NULL)
+    {
+        extern CHAR MmDiagText[];
+        FrLdrBugCheckWithMessage(MEMORY_INIT_FAILURE, __FILE__, __LINE__,
+                                 "no room for the default heap\n%s", MmDiagText);
+    }
+#endif
     ASSERT(FrLdrDefaultHeap);
 
     /* Create a temporary heap */

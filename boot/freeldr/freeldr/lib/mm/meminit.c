@@ -35,6 +35,11 @@ PFN_NUMBER MmArmRamBasePage = 0;
 #endif
 PFN_NUMBER MmHighestPhysicalPage = 0;
 
+#ifdef FREELDR_MEMMAP_DIAG
+/* the free ranges and the window, shown if the heap cannot be made */
+CHAR MmDiagText[1024];
+#endif
+
 PFREELDR_MEMORY_DESCRIPTOR BiosMemoryMap;
 ULONG BiosMemoryMapEntryCount;
 SIZE_T FrLdrImageSize;
@@ -437,6 +442,18 @@ PFN_NUMBER MmGetAddressablePageCountIncludingHoles(VOID)
     /* KSEG0 holds one GB, the loader and everything it hands over stays inside it */
     MmArmRamBasePage = MmHighestPhysicalPage;
     MemoryDescriptor = NULL;
+#ifdef FREELDR_MEMMAP_DIAG
+    while ((MemoryDescriptor = ArcGetMemoryDescriptor(MemoryDescriptor)) != NULL)
+    {
+        if (MemoryDescriptor->MemoryType == LoaderFree &&
+            strlen(MmDiagText) < sizeof(MmDiagText) - 48)
+        {
+            sprintf(MmDiagText + strlen(MmDiagText), "free %lx + %lx\n",
+                    MemoryDescriptor->BasePage, MemoryDescriptor->PageCount);
+        }
+    }
+    MemoryDescriptor = NULL;
+#endif
     while ((MemoryDescriptor = ArcGetMemoryDescriptor(MemoryDescriptor)) != NULL)
     {
         if ((MemoryDescriptor->MemoryType == LoaderFree) &&
@@ -447,12 +464,17 @@ PFN_NUMBER MmGetAddressablePageCountIncludingHoles(VOID)
     }
     if (MmHighestPhysicalPage > MmArmRamBasePage + MM_ARM_KSEG0_PAGES)
     {
-        WARN("RAM above %lx is out of reach for now\n", MmArmRamBasePage + MM_ARM_KSEG0_PAGES);
+        ERR("RAM above %lx is out of reach for now\n", MmArmRamBasePage + MM_ARM_KSEG0_PAGES);
         MmHighestPhysicalPage = MmArmRamBasePage + MM_ARM_KSEG0_PAGES;
     }
 #endif
 
+#ifdef FREELDR_MEMMAP_DIAG
+    sprintf(MmDiagText + strlen(MmDiagText), "lo %lx hi %lx ram base %lx\n",
+            MmLowestPhysicalPage, MmHighestPhysicalPage, MmArmRamBasePage);
+#else
     TRACE("lo/hi %lx %lx\n", MmLowestPhysicalPage, MmHighestPhysicalPage);
+#endif
     PageCount = MmHighestPhysicalPage - MmLowestPhysicalPage;
     TRACE("MmGetAddressablePageCountIncludingHoles() returning 0x%x\n", PageCount);
     return PageCount;
@@ -521,17 +543,27 @@ VOID MmInitPageLookupTable(PVOID PageLookupTable, PFN_NUMBER TotalPageCount)
     // Parse the whole memory map
     while ((MemoryDescriptor = ArcGetMemoryDescriptor(MemoryDescriptor)) != NULL)
     {
+        PFN_NUMBER TableEnd = MmLowestPhysicalPage + TotalPageCount;
+        PFN_NUMBER PageCount = MemoryDescriptor->PageCount;
+
         // Mark used pages in the lookup table
 
-        if (MemoryDescriptor->BasePage + MemoryDescriptor->PageCount <= TotalPageCount)
+        /* a range that runs past the table counts up to its end, arm keeps only a gb of ram */
+        if (MemoryDescriptor->BasePage < TableEnd &&
+            MemoryDescriptor->BasePage + PageCount > TableEnd)
+        {
+            PageCount = TableEnd - MemoryDescriptor->BasePage;
+        }
+
+        if (MemoryDescriptor->BasePage + PageCount <= TableEnd)
         {
             TRACE("Marking pages 0x%lx-0x%lx as type %s\n",
                   MemoryDescriptor->BasePage,
-                  MemoryDescriptor->BasePage + MemoryDescriptor->PageCount,
+                  MemoryDescriptor->BasePage + PageCount,
                   MmGetSystemMemoryMapTypeString(MemoryDescriptor->MemoryType));
             MmMarkPagesInLookupTable(PageLookupTable,
                                      MemoryDescriptor->BasePage,
-                                     MemoryDescriptor->PageCount,
+                                     PageCount,
                                      MemoryDescriptor->MemoryType);
         }
         else

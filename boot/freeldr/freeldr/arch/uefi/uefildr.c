@@ -31,7 +31,11 @@ EfiEntry(
     _In_ EFI_HANDLE ImageHandle,
     _In_ EFI_SYSTEM_TABLE *SystemTable)
 {
+#ifdef FREELDR_MEMMAP_DIAG
+    PCSTR CmdLine = "DEBUGPORT=SCREEN";
+#else
     PCSTR CmdLine = ""; // FIXME: Determine a command-line from UEFI boot options
+#endif
 
 #ifdef _M_ARM
     ArmEnableVfp();
