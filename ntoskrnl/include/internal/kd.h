@@ -47,6 +47,13 @@ typedef enum _KDP_DEBUG_SERVICE
     ThatsWhatSheSaid = 69 /* FIGURE IT OUT */
 } KDP_DEBUG_SERVICE;
 
+/* the loader's console print, carries DEBUGPORT=SCREEN until the boot video driver loads */
+extern ULONG (*KdpLoaderPrint)(const char *Format, ...);
+
+VOID
+KdpScreenEarlyAcquire(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
 #endif // _NTOSKRNL_
 
 #if DBG && defined(_M_IX86) && !defined(_WINKD_) // See ke/i386/traphdlr.c
@@ -56,4 +63,5 @@ typedef void (NTAPI *PKDBG_PRESERVICEHOOK)(ULONG, PULONG_PTR);
 typedef ULONG_PTR (NTAPI *PKDBG_POSTSERVICEHOOK)(ULONG, ULONG_PTR);
 extern PKDBG_PRESERVICEHOOK KeWin32PreServiceHook;
 extern PKDBG_POSTSERVICEHOOK KeWin32PostServiceHook;
+
 #endif

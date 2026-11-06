@@ -196,6 +196,9 @@ InbvDriverInitialize(
         ResetMode   = (CommandLine == NULL) || (strstr(CommandLine, "BOOTLOGO") == NULL);
     }
 
+    /* the loader's console stops here, the boot video driver owns the screen next */
+    KdpLoaderPrint = NULL;
+
     /* Initialize the video */
     InbvBootDriverInstalled = VidInitialize(ResetMode);
     if (InbvBootDriverInstalled)

@@ -172,8 +172,9 @@ KiInitializeKernel(
 
     KiInitializeHandBuiltThread(InitThread, InitProcess, IdleStack);
 
-    /* Phase 0 of the memory manager drops the identity mapping the loader runs on */
-    KiEarlyTrace("KiInitializeKernel: executive phase 0 next, loader console ends here\n");
+    /* kd keeps the loader console until the memory manager reuses the loader memory */
+    KiEarlyTrace("KiInitializeKernel: executive phase 0 next, kd takes the loader console\n");
+    KdpLoaderPrint = FrLdrDbgPrint;
     FrLdrDbgPrint = NULL;
 
     ExpInitializeExecutive(0, LoaderBlock);

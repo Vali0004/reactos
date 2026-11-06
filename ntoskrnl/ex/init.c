@@ -1114,8 +1114,18 @@ ExpInitializeExecutive(IN ULONG Cpu,
     /* Initialize the executive at phase 0 */
     if (!ExInitSystem()) KeBugCheck(PHASE0_INITIALIZATION_FAILED);
 
+#ifdef _M_ARM
+    /* the loader memory is handed out from here on, its console goes with it */
+    KdpLoaderPrint = NULL;
+#endif
+
     /* Initialize the memory manager at phase 0 */
     if (!MmArmInitSystem(0, LoaderBlock)) KeBugCheck(PHASE0_INITIALIZATION_FAILED);
+
+#ifdef _M_ARM
+    /* most arm boards have no serial, so the boot video driver takes the screen right away */
+    KdpScreenEarlyAcquire(LoaderBlock);
+#endif
 
     /* Load boot symbols */
     ExpLoadBootSymbols(LoaderBlock);

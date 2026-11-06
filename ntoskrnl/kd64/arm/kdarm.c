@@ -30,7 +30,8 @@ NTAPI
 KdpSetContextState(IN PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange,
                    IN PCONTEXT Context)
 {
-    UNIMPLEMENTED;
+    /* every boot symbol load comes through here, so it has to stay quiet */
+    WaitStateChange->AnyControlReport.ARMControlReport.Cpsr = Context->Cpsr;
 }
 
 NTSTATUS

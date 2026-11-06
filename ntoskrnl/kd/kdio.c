@@ -45,6 +45,7 @@ static CHAR KdpScreenLineBuffer[KdpScreenLineLengthDefault + 1] = "";
 static ULONG KdpScreenLineBufferPos = 0, KdpScreenLineLength = 0;
 
 KDP_DEBUG_MODE KdpDebugMode;
+ULONG (*KdpLoaderPrint)(const char *Format, ...) = NULL;
 LIST_ENTRY KdProviders = {&KdProviders, &KdProviders};
 KD_DISPATCH_TABLE DispatchTable[KdMax] = {0};
 
@@ -445,6 +446,16 @@ KdpScreenAcquire(VOID)
     }
 }
 
+CODE_SEG("INIT")
+VOID
+KdpScreenEarlyAcquire(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    /* the boot video driver maps the screen itself, so it only needs phase 0 memory */
+    if (KdpDebugMode.Screen && InbvDriverInitialize(LoaderBlock, IDB_MAX_RESOURCES))
+        KdpScreenAcquire();
+}
+
 // extern VOID NTAPI InbvSetDisplayOwnership(IN BOOLEAN DisplayOwned);
 
 VOID
@@ -551,6 +562,20 @@ KdIoPrintString(
 {
     PLIST_ENTRY CurrentEntry;
     PKD_DISPATCH_TABLE CurrentTable;
+    CHAR Chunk[128];
+    ULONG Done, Size;
+
+    /* the screen has no driver yet, so the loader's console draws it */
+    if (KdpLoaderPrint && KdpDebugMode.Screen)
+    {
+        for (Done = 0; Done < Length && String[Done]; Done += Size)
+        {
+            Size = min(Length - Done, sizeof(Chunk) - 1);
+            RtlCopyMemory(Chunk, String + Done, Size);
+            Chunk[Size] = ANSI_NULL;
+            KdpLoaderPrint("%s", Chunk);
+        }
+    }
 
     /* Call the registered providers */
     for (CurrentEntry = KdProviders.Flink;
