@@ -49,6 +49,10 @@ elseif(ARCH STREQUAL "arm64")
     "Which CPU ReactOS should be optimized for.")
 endif()
 
+if(ARCH STREQUAL "arm")
+    option(ARM_NEON "Use NEON and VFPv3-D32. Turn it off for VFPv3-D16 cores like the Tegra 2" ON)
+endif()
+
 set(OPTIMIZE "4" CACHE STRING
 "What level of optimization to use.
  0 = Off

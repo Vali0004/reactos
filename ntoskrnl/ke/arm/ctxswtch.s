@@ -11,6 +11,7 @@
     IMPORT KiArmStartThread
     IMPORT KiArmTrapExit
     IMPORT KiSwitchKernelStack
+    IMPORT KiArmVfpD32
 
     TEXTAREA
 
@@ -30,12 +31,16 @@
     stm     r12, {r4-r11}
     str     lr, [sp, #SwReturn]
 
-    /* the vfp registers belong to the thread, the a15 has 32 of them */
+    /* the vfp registers belong to the thread, d16-d31 only exist on d32 cores */
     vmrs    r12, fpscr
     str     r12, [sp, #SwFpscr]
     add     r12, sp, #SwD
     vstm    r12!, {d0-d15}
+    mov32   r3, KiArmVfpD32
+    ldrb    r3, [r3]
+    cbz     r3, KiSwapContextSaved
     vstm    r12, {d16-d31}
+LABEL(KiSwapContextSaved)
 
     /* the KIPCR sits in TPIDRPRW, the low bits are reserved */
     mrc     p15, 0, r2, c13, c0, 4
@@ -62,7 +67,11 @@ LABEL(KiSwapContextReady)
 
     add     r12, sp, #SwD
     vldm    r12!, {d0-d15}
+    mov32   r3, KiArmVfpD32
+    ldrb    r3, [r3]
+    cbz     r3, KiSwapContextLoaded
     vldm    r12, {d16-d31}
+LABEL(KiSwapContextLoaded)
     ldr     r12, [sp, #SwFpscr]
     vmsr    fpscr, r12
 

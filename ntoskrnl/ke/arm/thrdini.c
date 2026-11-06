@@ -46,6 +46,9 @@ C_ASSERT((sizeof(KKINIT_FRAME) % 8) == 0);
 /* cortex-a8 class cores have no generic timer, set once at startup */
 BOOLEAN KiArmHasGenericTimer;
 
+/* vfpv3-d16 cores like the tegra 2 have no d16-d31, the context switch checks it */
+BOOLEAN KiArmVfpD32;
+
 /* FUNCTIONS *****************************************************************/
 
 VOID

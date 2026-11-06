@@ -111,6 +111,10 @@ KiInitializeCpu(
     __isb(_ARM_BARRIER_SY);
     __asm__ __volatile__("vmsr fpexc, %0" : : "r" (FPEXC_EN));
 
+    /* mvfr0 bits 3:0 say 2 when the register file has 32 doubles */
+    __asm__ __volatile__("vmrs %0, mvfr0" : "=r" (Value));
+    KiArmVfpD32 = ((Value & 0xF) == 2);
+
     /* MIDR tells the part and revision */
     Value = _MoveFromCoprocessor(15, 0, 0, 0, 0);
     Pcr->Prcb.ProcessorState.ArchState.Cp15_Cr0_CpuId = Value;

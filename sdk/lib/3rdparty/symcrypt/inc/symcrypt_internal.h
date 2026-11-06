@@ -117,6 +117,9 @@
 #elif defined __clang_major__ && __clang_major__ < 19
 /* clang versions < 19 don't implement target attributes correctly */
 #define SYMCRYPT_IGNORE_PLATFORM
+#elif defined(_M_ARM) && !defined(__ARM_NEON)
+/* the arm paths are neon only, cores without it take the generic code */
+#define SYMCRYPT_IGNORE_PLATFORM
 #endif
 
 #define SYMCRYPT_CPU_X86            0

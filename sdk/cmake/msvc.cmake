@@ -640,6 +640,10 @@ if(USE_CLANG_CL AND ARCH STREQUAL "arm")
     # traps do not save vfp, so copies must not borrow its registers, real
     # floating point still uses vfp and the context switch keeps it per thread
     add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-mno-implicit-float>")
+    # without neon only d0-d15 exist, the kernel checks mvfr0 before it saves more
+    if(NOT ARM_NEON)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-mfpu=vfpv3-d16>")
+    endif()
 endif()
 
 # disable exceptions unless said so

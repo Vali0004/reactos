@@ -6,6 +6,7 @@
 
 /* set at startup, cortex-a8 class cores have no generic timer */
 extern BOOLEAN KiArmHasGenericTimer;
+extern BOOLEAN KiArmVfpD32;
 
 /* the virtual count of the generic timer, the pmu cycle counter where there is none */
 FORCEINLINE
