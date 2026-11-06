@@ -229,6 +229,32 @@ VidFbInitializeVideo(
     return TRUE;
 }
 
+
+/* the display reads memory, on arm the writes have to leave the data cache for it to see them */
+static
+VOID
+VidFbFlush(
+    _In_ ULONG_PTR Address,
+    _In_ ULONG Size)
+{
+#if defined(_M_ARM) || defined(_M_ARM64)
+    ULONG_PTR Line, End = Address + Size;
+
+    for (Line = Address & ~(ULONG_PTR)31; Line < End; Line += 32)
+    {
+#if defined(_M_ARM)
+        __asm__ __volatile__("mcr p15, 0, %0, c7, c10, 1" : : "r" (Line) : "memory");
+#else
+        __asm__ __volatile__("dc cvac, %0" : : "r" (Line) : "memory");
+#endif
+    }
+    __asm__ __volatile__("dsb sy" : : : "memory");
+#else
+    UNREFERENCED_PARAMETER(Address);
+    UNREFERENCED_PARAMETER(Size);
+#endif
+}
+
 VOID
 VidFbClearScreenColor(
     _In_ UINT32 Color,
@@ -253,6 +279,9 @@ VidFbClearScreenColor(
                 *s++ = Color;
         }
     }
+
+    VidFbFlush(framebufInfo.BaseAddress + (FullScreen ? 0 : TOP_BOTTOM_LINES) * framebufInfo.Delta,
+               (framebufInfo.ScreenHeight - (FullScreen ? 0 : 2 * TOP_BOTTOM_LINES)) * framebufInfo.Delta);
 }
 
 /**
@@ -297,6 +326,7 @@ VidFbOutputChar(
                 Shadow[Col] = Color;
             Mask = Mask >> 1;
         }
+        VidFbFlush((ULONG_PTR)Pixel, CHAR_WIDTH * sizeof(UINT32));
         Pixel = (PUINT32)((PUCHAR)Pixel + framebufInfo.Delta);
         if (Shadow)
             Shadow = (PUINT32)((PUCHAR)Shadow + framebufInfo.Delta);
@@ -320,6 +350,7 @@ VidFbPutPixel(
 
     Offset = Y * framebufInfo.Delta + X * sizeof(UINT32);
     *(PUINT32)(framebufInfo.BaseAddress + Offset) = Color;
+    VidFbFlush(framebufInfo.BaseAddress + Offset, sizeof(UINT32));
     if (framebufInfo.ShadowAddress)
         *(PUINT32)(framebufInfo.ShadowAddress + Offset) = Color;
 }
@@ -426,6 +457,7 @@ VidFbScrollUp(
             for (Col = 0; Col < framebufInfo.ScreenWidth; Col++)
                 Dst[Col] = Src[Col];
         }
+        VidFbFlush((ULONG_PTR)Area, Lines * framebufInfo.Delta);
         return;
     }
 
@@ -445,6 +477,7 @@ VidFbScrollUp(
                 Dst[Col] = Color;
         }
     }
+    VidFbFlush((ULONG_PTR)Area, Lines * framebufInfo.Delta);
 }
 
 #if 0
