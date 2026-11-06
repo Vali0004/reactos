@@ -168,6 +168,7 @@ HalpExtInterruptInitialize(VOID)
 
     if (HalpExtController->FunctionTable.Base.InitializeIoUnit)
     {
+        HalpEarlyTrace("HAL: extension io unit\n");
         Status = HalpExtController->FunctionTable.Base.InitializeIoUnit(Data);
         if (!NT_SUCCESS(Status))
         {
@@ -200,6 +201,8 @@ HalpExtInterruptInitializeCpu(
         &LocalId);
     if (!NT_SUCCESS(Status))
         KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x7178, ProcessorNumber, Status, 0);
+
+    HalpEarlyTrace("HAL: extension local unit done, software lines\n");
 
     /* software lines can be banked per cpu, so they are set after its local unit */
     for (i = 0; i < RTL_NUMBER_OF(HalpExtSoftwareVector); i++)

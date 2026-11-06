@@ -72,13 +72,21 @@ HalpMapTable(
     if (!Header)
         return NULL;
 
+#ifdef _M_ARM
+    HalpEarlyTrace("HAL: map %lx at %p pte %lx l1 %lx\n", PhysicalAddress.LowPart, Header,
+                   MiAddressToPte(Header)->u.Long, ((PULONG)0xC0800000)[(ULONG_PTR)Header >> 20]);
+#endif
     Length = Header->Length;
+    HalpEarlyTrace("HAL: header read, length %lx\n", Length);
     HalpUnmapVirtualAddress(Header, 1);
+    HalpEarlyTrace("HAL: unmapped\n");
 
     if (Length < sizeof(*Header))
         return NULL;
 
-    return HalpMapPhysicalMemory(PhysicalAddress, BYTES_TO_PAGES(Length), FALSE);
+    Header = HalpMapPhysicalMemory(PhysicalAddress, BYTES_TO_PAGES(Length), FALSE);
+    HalpEarlyTrace("HAL: whole table at %p\n", Header);
+    return Header;
 }
 
 static
@@ -273,17 +281,23 @@ HalpAcpiInitialize(
     }
 
     HalpPlatform.RootTable = RootAddress;
+    HalpEarlyTrace("HAL: acpi root at %lx\n", RootAddress.LowPart);
     Root = HalpMapTable(RootAddress);
     if (!Root)
         return;
 
     Count = HalpRootTableCount(Root);
+    HalpEarlyTrace("HAL: root %c%c%c%c with %lu tables\n", (CHAR)Root->Signature, (CHAR)(Root->Signature >> 8), (CHAR)(Root->Signature >> 16), (CHAR)(Root->Signature >> 24), Count);
     for (i = 0; i < Count; i++)
     {
-        Header = HalpMapTable(HalpRootTableEntry(Root, i));
+        PHYSICAL_ADDRESS Entry = HalpRootTableEntry(Root, i);
+
+        HalpEarlyTrace("HAL: table %lu at %lx\n", i, Entry.LowPart);
+        Header = HalpMapTable(Entry);
         if (!Header)
             continue;
 
+        HalpEarlyTrace("HAL: %c%c%c%c length %lx\n", (CHAR)Header->Signature, (CHAR)(Header->Signature >> 8), (CHAR)(Header->Signature >> 16), (CHAR)(Header->Signature >> 24), Header->Length);
         HalpParseTable(Header);
         HalpUnmapTable(Header);
     }

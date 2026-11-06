@@ -380,6 +380,7 @@ HalpExtAddResourceGroups(
         if ((Group->VendorId == Module->VendorId) && (Group->DeviceId == Module->DeviceId))
         {
             Status = HalpExtExports[Handle]->AddResourceGroup(Handle, Group);
+            HalpEarlyTrace("HAL: group %04x added, status %lx\n", Group->DeviceId, Status);
             if (!NT_SUCCESS(Status))
                 DPRINT1("HALEXT: %wZ refused a group, %lx\n", &Module->LdrEntry->BaseDllName, Status);
         }
@@ -428,6 +429,9 @@ HalpExtInitialize(
 
         Handle = HalpExtCount;
         ExtensionInit = (PHALEXT_INIT)Module->LdrEntry->EntryPoint;
+        HalpEarlyTrace("HAL: starting extension at %p for %c%c%c%c/%04x\n", Module->LdrEntry->DllBase,
+                       (CHAR)Module->VendorId, (CHAR)(Module->VendorId >> 8),
+                       (CHAR)(Module->VendorId >> 16), (CHAR)(Module->VendorId >> 24), Module->DeviceId);
         Status = ExtensionInit(OsExtensionHalExtension, &HalpExtExports[Handle], &HalpExtImports);
         if (!NT_SUCCESS(Status) || !HalpExtExports[Handle] || !HalpExtExports[Handle]->AddResourceGroup)
         {
@@ -440,4 +444,6 @@ HalpExtInitialize(
     }
 
     HalpExtRegistrationOpen = FALSE;
+    HalpEarlyTrace("HAL: %lu controller(s), %lu timer(s), %lu line range(s)\n",
+                   HalpExtControllerCount, HalpExtTimerCount, HalpExtLineCount);
 }

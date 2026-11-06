@@ -26,6 +26,10 @@ ULONG HalpBusType = MACHINE_TYPE_ISA;
 
 BOOLEAN HalpProcessorsStarted;
 
+#ifdef _M_ARM
+ULONG (*HalpEarlyPrint)(const char *Format, ...);
+#endif
+
 /* FUNCTIONS *****************************************************************/
 
 /* Debug ports are device memory */
@@ -48,10 +52,19 @@ HalInitializeProcessor(
     /* The boot processor finds the platform before anything else runs */
     if (ProcessorNumber == 0)
     {
+#ifdef _M_ARM
+        HalpEarlyPrint = LoaderBlock->u.I386.CommonDataArea;
+#endif
+        HalpEarlyTrace("HAL: acpi\n");
         HalpAcpiInitialize(LoaderBlock);
+        HalpEarlyTrace("HAL: extensions\n");
         HalpExtInitialize(LoaderBlock);
+        HalpEarlyTrace("HAL: interrupt controller\n");
         if (!HalpExtInterruptInitialize())
+        {
+            HalpEarlyTrace("HAL: no extension controller, using the gic\n");
             HalpGicInitializeDistributor();
+        }
 
         /* The debugger looks for its port right after this */
         KdGetAcpiTablePhase0 = HalAcpiGetTable;
@@ -59,13 +72,16 @@ HalInitializeProcessor(
         KdUnmapVirtualAddress = HalpUnmapVirtualAddress;
     }
 
+    HalpEarlyTrace("HAL: cpu %lu interrupt unit\n", ProcessorNumber);
     if (HalpExtInterrupts)
         HalpExtInterruptInitializeCpu(ProcessorNumber);
     else
         HalpGicInitializeCpu(ProcessorNumber);
 
     /* Match the priority mask to the IRQL the kernel runs at */
+    HalpEarlyTrace("HAL: priority mask\n");
     HalpSetPriorityMask(KeGetPcr()->CurrentIrql);
+    HalpEarlyTrace("HAL: cpu %lu ready\n", ProcessorNumber);
 }
 
 CODE_SEG("INIT")

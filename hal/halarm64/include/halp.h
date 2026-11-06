@@ -302,6 +302,15 @@ NTAPI
 HalpSetPriorityMask(
     _In_ KIRQL Irql);
 
+/* early boot trace through the loader's print hook, gone once the debugger is up */
+#ifdef _M_ARM
+extern ULONG (*HalpEarlyPrint)(const char *Format, ...);
+#define HalpEarlyTrace(...) \
+    do { if (HalpEarlyPrint) HalpEarlyPrint(__VA_ARGS__); } while (0)
+#else
+#define HalpEarlyTrace(...) do { } while (0)
+#endif
+
 /* halext.c */
 VOID
 NTAPI
