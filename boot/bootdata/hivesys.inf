@@ -10,6 +10,7 @@ HKLM,"SYSTEM\CurrentControlSet\Control","WaitToKillServiceTimeout",2,"20000"
 HKLM,"SYSTEM\CurrentControlSet\Control\OSExtensionDatabase\VEN_OMAP&DEV_3430","HALExtension",0x00000000,"halextomap3.dll"
 HKLM,"SYSTEM\CurrentControlSet\Control\OSExtensionDatabase\VEN_QCOM&DEV_8250","HALExtension",0x00000000,"halextqsd8x50.dll"
 HKLM,"SYSTEM\CurrentControlSet\Control\OSExtensionDatabase\VEN_QCOM&DEV_0001","HALExtension",0x00000000,"halextqsd8x50.dll"
+HKLM,"SYSTEM\CurrentControlSet\Control\OSExtensionDatabase\VEN_NVDA&DEV_000A","HALExtension",0x00000000,"halexttegra3.dll"
 HKLM,"SYSTEM\CurrentControlSet\Control\OSExtensionDatabase\VEN_QEMU&DEV_0001","HALExtension",0x00000000,"halextvirt.dll"
 
 HKLM,"SYSTEM\CurrentControlSet\Control\PnP",,0x00000012
