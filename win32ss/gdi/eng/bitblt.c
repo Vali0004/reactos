@@ -1111,7 +1111,7 @@ IntEngMaskBlt(
     _In_ BRUSHOBJ *pbo,
     _In_ POINTL *pptlBrushOrg)
 {
-    BOOLEAN ret;
+    BOOLEAN ret, bHooked;
     RECTL rcDest;
     POINTL ptMask = {0,0};
     PSURFACE psurfTemp;
@@ -1163,8 +1163,9 @@ IntEngMaskBlt(
         rcDest = *prclDest;
     }
 
-    /* Check if the target surface is device managed */
-    if (psoDest->iType != STYPE_BITMAP)
+    /* Check if the target surface is device managed, or hooked so the driver must see the change */
+    bHooked = (CONTAINING_RECORD(psoDest, SURFACE, SurfObj)->flags & HOOK_BITBLT) != 0;
+    if (psoDest->iType != STYPE_BITMAP || bHooked)
     {
         rcTemp.left = 0;
         rcTemp.top = 0;
@@ -1207,7 +1208,22 @@ IntEngMaskBlt(
                                 pptlBrushOrg);
         }
 
-        if (ret)
+        if (ret && bHooked)
+        {
+            /* Copy the result back through the driver's hook */
+            ret = IntEngBitBlt(psoDest,
+                               &psurfTemp->SurfObj,
+                               NULL,
+                               pco,
+                               NULL,
+                               &rcDest,
+                               (PPOINTL)&rcTemp,
+                               NULL,
+                               NULL,
+                               NULL,
+                               ROP4_FROM_INDEX(R3_OPINDEX_SRCCOPY));
+        }
+        else if (ret)
         {
             /* Copy the result back to the dest surface */
             ret = EngCopyBits(psoDest,
