@@ -305,6 +305,20 @@ WinLdrpEarlyPrint(
     return (ULONG)(Current - Buffer);
 }
 
+/*
+ * below KSEG0 nothing of the kernel lives, inside the KSEG0 RAM window a one to one
+ * mapping is the kernel's own mapping when RAM starts at KSEG0_BASE, like on omap3
+ */
+static
+BOOLEAN
+WinLdrpIdentityAllowed(
+    _In_ ULONG_PTR Address)
+{
+    if (Address < KSEG0_BASE)
+        return TRUE;
+    return (Address < KSEG0_BASE + 0x40000000) && (VaToPa((PVOID)Address) == (PVOID)Address);
+}
+
 /* The loader console keeps drawing after the switch while the kernel prints through it */
 static
 VOID
@@ -314,6 +328,13 @@ WinLdrpMapFrameBuffer(VOID)
 
     if (!VramAddress || !VramSize)
         return;
+
+    /* the console needs it one to one, which only fits where that cannot clash with kernel space */
+    if (!WinLdrpIdentityAllowed(VramAddress) || !WinLdrpIdentityAllowed(VramAddress + VramSize - 1))
+    {
+        WinLdrpTrace("freeldr: framebuffer %p is in kernel space, left unmapped\n", (PVOID)VramAddress);
+        return;
+    }
 
     End = ALIGN_UP_BY(VramAddress + VramSize, MM_PAGE_SIZE);
     for (Address = ALIGN_DOWN_BY(VramAddress, MM_PAGE_SIZE); Address < End; Address += MM_PAGE_SIZE)
@@ -357,6 +378,14 @@ WinLdrpMapDebugPorts(VOID)
         return;
 
     Page = Port & ~(MM_PAGE_SIZE - 1);
+
+    /* one to one mappings above KSEG0 would sit in kernel space the memory manager lays out itself */
+    if (!WinLdrpIdentityAllowed(Page))
+    {
+        WinLdrpTrace("freeldr: debug port %p is in kernel space, left unmapped\n", (PVOID)Page);
+        return;
+    }
+
     if (!MempIsPageMapped(Page))
         MempMapSinglePage(Page, Page, ARM_PTE_DEVICE);
 }
