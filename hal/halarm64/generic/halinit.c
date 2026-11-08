@@ -110,6 +110,11 @@ HalInitSystem(
         /* The ACPI driver enumerates the platform below the HAL device */
         HalInitPnpDriver = HaliInitPnpDriver;
         HalInitPowerManagement = HaliInitPowerManagement;
+
+#ifdef _M_ARM
+        /* the memory manager unmaps the loader next, its printer goes with it */
+        HalpEarlyPrint = NULL;
+#endif
     }
     else if (BootPhase == 1)
     {
