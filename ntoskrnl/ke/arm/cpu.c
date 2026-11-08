@@ -106,10 +106,47 @@ BOOLEAN
 NTAPI
 KeInvalidateAllCaches(VOID)
 {
-    //
-    // Invalidate D cache and I cache
-    //
-    KeArmInvalidateAllCaches();
+    ULONG Control, Clidr, LevelOfCoherency, Level, Ccsidr;
+    ULONG LineShift, MaxWay, MaxSet, WayShift, Way, Set;
+
+    /* armv7 has no invalidate all, so clean each data cache by set and way like wbinvd does */
+    /* an interrupt between selecting a level and reading its size would corrupt the walk */
+    __asm__ __volatile__ ("mrs %0, cpsr\n\tcpsid i" : "=r"(Control) : : "cc");
+
+    Clidr = _MoveFromCoprocessor(15, 1, 0, 0, 1);
+    LevelOfCoherency = (Clidr >> 24) & 7;
+    __asm__ __volatile__ ("dsb sy");
+
+    for (Level = 0; Level < LevelOfCoherency; Level++)
+    {
+        /* 0 is no cache and 1 is instruction only */
+        if (((Clidr >> (Level * 3)) & 7) < 2)
+            continue;
+
+        _MoveToCoprocessor(Level << 1, 15, 2, 0, 0, 0);
+        __asm__ __volatile__ ("isb sy");
+        Ccsidr = _MoveFromCoprocessor(15, 1, 0, 0, 0);
+
+        LineShift = (Ccsidr & 7) + 4;
+        MaxWay = (Ccsidr >> 3) & 0x3FF;
+        MaxSet = (Ccsidr >> 13) & 0x7FFF;
+        WayShift = MaxWay ? __builtin_clz(MaxWay) : 0;
+
+        for (Set = 0; Set <= MaxSet; Set++)
+        {
+            for (Way = 0; Way <= MaxWay; Way++)
+            {
+                _MoveToCoprocessor((Way << WayShift) | (Set << LineShift) | (Level << 1),
+                                   15, 0, 7, 14, 2);
+            }
+        }
+    }
+
+    _MoveToCoprocessor(0, 15, 2, 0, 0, 0);
+    __asm__ __volatile__ ("dsb sy\n\tisb sy");
+
+    KeArmFlushIcache();
+    __asm__ __volatile__ ("dsb sy\n\tisb sy\n\tmsr cpsr_c, %0" : : "r"(Control) : "cc");
     return TRUE;
 }
 

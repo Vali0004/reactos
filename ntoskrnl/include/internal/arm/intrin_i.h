@@ -9,7 +9,7 @@ KeArmHaltProcessor(VOID)
     //
 #if defined(_MSC_VER) && !defined(__clang__)
 #else
-    __asm__ __volatile__ ("mcr p15, 0, %0, c7, c0, 4" : : "r"(0) : "cc");
+    __asm__ __volatile__ ("wfi");
 #endif
 }
 
@@ -176,7 +176,12 @@ KeArmFlushTlb(VOID)
 {
 #if defined(_MSC_VER) && !defined(__clang__)
 #else
-    __asm__ __volatile__ ("mcr p15, 0, %0, c8, c7, 0" : : "r"(0) : "cc");
+    /* the new entries must reach the walker first, nothing may use the old ones after */
+    __asm__ __volatile__ ("dsb ishst\n\t"
+                          "mcr p15, 0, %0, c8, c7, 0\n\t"
+                          "mcr p15, 0, %0, c7, c5, 6\n\t"
+                          "dsb ish\n\t"
+                          "isb sy" : : "r"(0) : "cc", "memory");
 #endif
 }
 
@@ -186,17 +191,12 @@ KeArmInvalidateTlbEntry(IN PVOID Address)
 {
 #if defined(_MSC_VER) && !defined(__clang__)
 #else
-    __asm__ __volatile__ ("mcr p15, 0, %0, c8, c7, 1" : : "r"(Address) : "cc");
-#endif
-}
-
-FORCEINLINE
-VOID
-KeArmInvalidateAllCaches(VOID)
-{
-#if defined(_MSC_VER) && !defined(__clang__)
-#else
-    __asm__ __volatile__ ("mcr p15, 0, %0, c7, c7, 0" : : "r"(0) : "cc");
+    /* the new entry must reach the walker first, nothing may use the old one after */
+    __asm__ __volatile__ ("dsb ishst\n\t"
+                          "mcr p15, 0, %0, c8, c7, 1\n\t"
+                          "mcr p15, 0, %1, c7, c5, 6\n\t"
+                          "dsb ish\n\t"
+                          "isb sy" : : "r"((ULONG_PTR)Address & ~0xFFFUL), "r"(0) : "cc", "memory");
 #endif
 }
 
@@ -216,6 +216,6 @@ KeArmWaitForInterrupt(VOID)
 {
 #if defined(_MSC_VER) && !defined(__clang__)
 #else
-    __asm__ __volatile__ ("mcr p15, 0, %0, c7, c0, 4" : : "r"(0) : "cc");
+    __asm__ __volatile__ ("wfi");
 #endif
 }
