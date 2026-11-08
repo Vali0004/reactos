@@ -34,7 +34,7 @@ PaToVa(PVOID Pa)
         return Pa;
     return (PVOID)((ULONG_PTR)Pa - (MmArmRamBasePage << MM_PAGE_SHIFT) + KSEG0_BASE);
 }
-#elif !defined(_ZOOM2_)
+#else
 /* Arch-specific addresses translation implementation */
 FORCEINLINE
 PVOID
@@ -48,19 +48,5 @@ PVOID
 PaToVa(PVOID Pa)
 {
     return (PVOID)((ULONG_PTR)Pa | KSEG0_BASE);
-}
-#else
-FORCEINLINE
-PVOID
-VaToPa(PVOID Va)
-{
-    return Va;
-}
-
-FORCEINLINE
-PVOID
-PaToVa(PVOID Pa)
-{
-    return Pa;
 }
 #endif

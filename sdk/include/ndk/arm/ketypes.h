@@ -28,7 +28,6 @@ extern "C" {
 // Dependencies
 //
 
-
 //
 // CPU Vendors
 //
@@ -179,7 +178,6 @@ typedef enum
 #define CPVFP_FPEXC     10, 7,  8,  0, 0
 #define CP15_TTBRx_PD_MASK 0xffffc000
 
-
 //
 // CPSR Values
 //
@@ -329,7 +327,6 @@ typedef union _CPU_INFO
     ULONG Dummy;
 } CPU_INFO, *PCPU_INFO;
 
-
 //
 // ARM VFP State
 // Based on Windows RT 8.1 symbols and ksarm.h
@@ -446,16 +443,6 @@ typedef struct _KARM_ARCH_STATE
 //
 // ARM Internal Registers
 //
-typedef union _ARM_TTB_REGISTER
-{
-    struct
-    {
-        ULONG Reserved:14;
-        ULONG BaseAddress:18;
-    };
-    ULONG AsUlong;
-} ARM_TTB_REGISTER;
-
 typedef union _ARM_STATUS_REGISTER
 {
 
@@ -480,108 +467,6 @@ typedef union _ARM_STATUS_REGISTER
     };
     ULONG AsUlong;
 } ARM_STATUS_REGISTER;
-
-typedef union _ARM_DOMAIN_REGISTER
-{
-    struct
-    {
-        ULONG Domain0:2;
-        ULONG Domain1:2;
-        ULONG Domain2:2;
-        ULONG Domain3:2;
-        ULONG Domain4:2;
-        ULONG Domain5:2;
-        ULONG Domain6:2;
-        ULONG Domain7:2;
-        ULONG Domain8:2;
-        ULONG Domain9:2;
-        ULONG Domain10:2;
-        ULONG Domain11:2;
-        ULONG Domain12:2;
-        ULONG Domain13:2;
-        ULONG Domain14:2;
-        ULONG Domain15:2;
-    };
-    ULONG AsUlong;
-} ARM_DOMAIN_REGISTER;
-
-typedef union _ARM_CONTROL_REGISTER
-{
-    struct
-    {
-        ULONG MmuEnabled:1;
-        ULONG AlignmentFaultsEnabled:1;
-        ULONG DCacheEnabled:1;
-        ULONG Sbo:4;
-        ULONG BigEndianEnabled:1;
-        ULONG System:1;
-        ULONG Rom:1;
-        ULONG Sbz:2;
-        ULONG ICacheEnabled:1;
-        ULONG HighVectors:1;
-        ULONG RoundRobinReplacementEnabled:1;
-        ULONG Armv4Compat:1;
-        ULONG Ignored:6;
-        ULONG UnalignedAccess:1;
-        ULONG ExtendedPageTables:1;
-        ULONG Sbz1:1;
-        ULONG ExceptionBit:1;
-        ULONG Sbz2:1;
-        ULONG Nmif:1;
-        ULONG TexRemap:1;
-        ULONG ForceAp:1;
-        ULONG Reserved:2;
-    };
-    ULONG AsUlong;
-} ARM_CONTROL_REGISTER, *PARM_CONTROL_REGISTER;
-
-C_ASSERT(sizeof(ARM_CONTROL_REGISTER) == sizeof(ULONG));
-
-typedef union _ARM_ID_CODE_REGISTER
-{
-    struct
-    {
-        ULONG Revision:4;
-        ULONG PartNumber:12;
-        ULONG Architecture:4;
-        ULONG Variant:4;
-        ULONG Identifier:8;
-    };
-    ULONG AsUlong;
-} ARM_ID_CODE_REGISTER, *PARM_ID_CODE_REGISTER;
-
-typedef union _ARM_CACHE_REGISTER
-{
-    struct
-    {
-        ULONG ILength:2;
-        ULONG IMultipler:1;
-        ULONG IAssociativty:3;
-        ULONG ISize:4;
-        ULONG IReserved:2;
-        ULONG DLength:2;
-        ULONG DMultipler:1;
-        ULONG DAssociativty:3;
-        ULONG DSize:4;
-        ULONG DReserved:2;
-        ULONG Separate:1;
-        ULONG CType:4;
-        ULONG Reserved:3;
-    };
-    ULONG AsUlong;
-} ARM_CACHE_REGISTER, *PARM_CACHE_REGISTER;
-
-typedef union _ARM_LOCKDOWN_REGISTER
-{
-    struct
-    {
-        ULONG Preserve:1;
-        ULONG Ignored:25;
-        ULONG Victim:3;
-        ULONG Reserved:3;
-    };
-    ULONG AsUlong;
-} ARM_LOCKDOWN_REGISTER, *PARM_LOCKDOWN_REGISTER;
 
 //
 // ARM Domains
@@ -616,7 +501,6 @@ typedef struct _DESCRIPTOR
     USHORT Dummy1;
     ULONG Dummy2;
 } KDESCRIPTOR, *PKDESCRIPTOR;
-
 
 //
 // Special Registers Structure (outside of CONTEXT)
@@ -1063,7 +947,6 @@ C_ASSERT(FIELD_OFFSET(KPRCB, Mailbox) == 0x680);
 C_ASSERT(FIELD_OFFSET(KPRCB, DpcData) == 0x690);
 C_ASSERT(FIELD_OFFSET(KPRCB, DpcStack) == 0x6c0);
 //C_ASSERT(FIELD_OFFSET(KPRCB, CallDpc) == 0x714);
-
 
 //
 // Processor Control Region
