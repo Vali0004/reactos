@@ -701,6 +701,39 @@ GetHarddiskInformation(
     TRACE("Identifier: %s\n", Identifier);
 }
 
+/* whether the whole device path of a disk is the start of the device path of a partition */
+static
+BOOLEAN
+UefiIsParentDevice(
+    _In_ EFI_HANDLE Disk,
+    _In_ EFI_HANDLE Partition)
+{
+    EFI_GUID DevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
+    EFI_DEVICE_PATH_PROTOCOL *DiskPath = NULL, *PartitionPath = NULL, *Node;
+    UINTN DiskPathLength = 0;
+
+    if (EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Disk, &DevicePathGuid, (VOID**)&DiskPath)) ||
+        EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Partition, &DevicePathGuid, (VOID**)&PartitionPath)) ||
+        !DiskPath || !PartitionPath)
+    {
+        return FALSE;
+    }
+
+    for (Node = DiskPath; !IsDevicePathEnd(Node); Node = NextDevicePathNode(Node))
+    {
+        if (DevicePathNodeLength(Node) < sizeof(EFI_DEVICE_PATH_PROTOCOL))
+            return FALSE;
+        DiskPathLength += DevicePathNodeLength(Node);
+    }
+
+    /* the partition path must go on past the disk's own nodes, into its hard drive node */
+    Node = (EFI_DEVICE_PATH_PROTOCOL*)((PUCHAR)PartitionPath + DiskPathLength);
+    return (DiskPathLength != 0) &&
+           (RtlCompareMemory(DiskPath, PartitionPath, DiskPathLength) == DiskPathLength) &&
+           (DevicePathType(Node) == MEDIA_DEVICE_PATH) &&
+           (DevicePathSubType(Node) == MEDIA_HARDDRIVE_DP);
+}
+
 static
 VOID
 UefiSetupBlockDevices(VOID)
@@ -903,7 +936,21 @@ UefiSetupBlockDevices(VOID)
             /* For CD-ROMs: match BlockSize=2048 and RemovableMedia=TRUE */
             /* For hard disks: match BlockSize and find the root device before this partition */
             BOOLEAN FoundBootDevice = FALSE;
+
+            /* the parent disk's device path is the partition's path without its hard drive node */
             for (i = 0; i < BlockDeviceIndex; i++)
+            {
+                if (UefiIsParentDevice(InternalUefiDisk[i].Handle, handles[UefiBootRootIndex]))
+                {
+                    PublicBootArcDisk = i;
+                    InternalUefiDisk[i].IsThisTheBootDrive = TRUE;
+                    FoundBootDevice = TRUE;
+                    TRACE("Found the parent of the boot partition at ARC drive index %lu\n", i);
+                    break;
+                }
+            }
+
+            for (i = 0; !FoundBootDevice && i < BlockDeviceIndex; i++)
             {
                 EFI_BLOCK_IO* RootBlockIo;
                 Status = GlobalSystemTable->BootServices->HandleProtocol(
