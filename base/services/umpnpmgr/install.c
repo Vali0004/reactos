@@ -30,6 +30,8 @@
 
 #include "precomp.h"
 
+#include <winnls.h>
+
 #define NDEBUG
 #include <debug.h>
 
@@ -50,6 +52,122 @@ CreatePnpInstallEventSecurity(
     _Out_ PSECURITY_DESCRIPTOR *EventSd);
 
 /* FUNCTIONS *****************************************************************/
+
+/* every inf as one upper case text, built on first use */
+static PWSTR InfIdText = NULL;
+static BOOL InfIdTextLoaded = FALSE;
+
+static VOID
+LoadInfIdText(VOID)
+{
+    WCHAR Pattern[MAX_PATH], Path[MAX_PATH];
+    WIN32_FIND_DATAW Find;
+    HANDLE hFind, hFile;
+    SIZE_T Used = 0, Size = 0;
+    PWSTR Text = NULL, Grown;
+    PBYTE Raw;
+    DWORD RawSize, Read;
+    INT Chars;
+
+    InfIdTextLoaded = TRUE;
+
+    GetSystemWindowsDirectoryW(Pattern, ARRAYSIZE(Pattern) - 10);
+    wcscat(Pattern, L"\\inf\\*.inf");
+    hFind = FindFirstFileW(Pattern, &Find);
+    if (hFind == INVALID_HANDLE_VALUE)
+        return;
+
+    do
+    {
+        GetSystemWindowsDirectoryW(Path, ARRAYSIZE(Path) - 6 - ARRAYSIZE(Find.cFileName));
+        wcscat(Path, L"\\inf\\");
+        wcscat(Path, Find.cFileName);
+
+        hFile = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (hFile == INVALID_HANDLE_VALUE)
+            continue;
+        RawSize = GetFileSize(hFile, NULL);
+        Raw = (RawSize != INVALID_FILE_SIZE && RawSize) ? HeapAlloc(GetProcessHeap(), 0, RawSize) : NULL;
+        if (!Raw || !ReadFile(hFile, Raw, RawSize, &Read, NULL))
+        {
+            if (Raw) HeapFree(GetProcessHeap(), 0, Raw);
+            CloseHandle(hFile);
+            continue;
+        }
+        CloseHandle(hFile);
+
+        /* utf-16 infs carry a bom, the rest are ansi */
+        if (Read >= 2 && Raw[0] == 0xFF && Raw[1] == 0xFE)
+            Chars = (Read - 2) / sizeof(WCHAR);
+        else
+            Chars = MultiByteToWideChar(CP_ACP, 0, (PCSTR)Raw, Read, NULL, 0);
+
+        if (Used + Chars + 2 > Size)
+        {
+            Size = (Used + Chars + 2) * 2;
+            Grown = Text ? HeapReAlloc(GetProcessHeap(), 0, Text, Size * sizeof(WCHAR))
+                         : HeapAlloc(GetProcessHeap(), 0, Size * sizeof(WCHAR));
+            if (!Grown)
+            {
+                HeapFree(GetProcessHeap(), 0, Raw);
+                break;
+            }
+            Text = Grown;
+        }
+
+        if (Read >= 2 && Raw[0] == 0xFF && Raw[1] == 0xFE)
+            CopyMemory(Text + Used, Raw + 2, Chars * sizeof(WCHAR));
+        else
+            MultiByteToWideChar(CP_ACP, 0, (PCSTR)Raw, Read, Text + Used, Chars);
+        Used += Chars;
+        Text[Used++] = L'\n';
+        HeapFree(GetProcessHeap(), 0, Raw);
+    } while (FindNextFileW(hFind, &Find));
+    FindClose(hFind);
+
+    if (!Text)
+        return;
+    Text[Used] = UNICODE_NULL;
+    CharUpperBuffW(Text, (DWORD)Used);
+    InfIdText = Text;
+}
+
+/* FALSE only when no inf mentions any id of the device, so no driver can match it */
+static BOOL
+DeviceMayHaveDriver(HKEY DeviceKey)
+{
+    static PCWSTR ValueNames[] = { L"HardwareID", L"CompatibleIDs" };
+    WCHAR Ids[1024], Id[256];
+    DWORD Type, Size, i;
+    PCWSTR Current;
+
+    if (!InfIdTextLoaded)
+        LoadInfIdText();
+    if (!InfIdText)
+        return TRUE;
+
+    for (i = 0; i < ARRAYSIZE(ValueNames); i++)
+    {
+        Size = sizeof(Ids) - 2 * sizeof(WCHAR);
+        if (RegQueryValueExW(DeviceKey, ValueNames[i], NULL, &Type, (PBYTE)Ids, &Size) != ERROR_SUCCESS ||
+            Type != REG_MULTI_SZ)
+        {
+            continue;
+        }
+        Ids[Size / sizeof(WCHAR)] = UNICODE_NULL;
+        Ids[Size / sizeof(WCHAR) + 1] = UNICODE_NULL;
+
+        for (Current = Ids; *Current; Current += wcslen(Current) + 1)
+        {
+            lstrcpynW(Id, Current, ARRAYSIZE(Id));
+            CharUpperW(Id);
+            if (wcsstr(InfIdText, Id))
+                return TRUE;
+        }
+    }
+
+    return FALSE;
+}
 
 static BOOL
 InstallDevice(PCWSTR DeviceInstance, BOOL ShowWizard)
@@ -110,6 +228,14 @@ InstallDevice(PCWSTR DeviceInstance, BOOL ShowWizard)
                 RegCloseKey(DeviceKey);
                 return TRUE;
             }
+        }
+
+        /* starting the wizard only to learn there is no driver costs a process per device */
+        if (!DeviceMayHaveDriver(DeviceKey))
+        {
+            DPRINT1("No driver for %S, not installing\n", DeviceInstance);
+            RegCloseKey(DeviceKey);
+            return FALSE;
         }
 
         RegCloseKey(DeviceKey);
