@@ -31,7 +31,7 @@ list(APPEND SOURCE
 if(ARCH STREQUAL "arm")
     # the uniprocessor spinlocks and IRQL wrappers the 32-bit HAL exports
     list(APPEND SOURCE
-        ${REACTOS_SOURCE_DIR}/hal/halarm/generic/spinlock.c
+        generic/arm/spinlock.c
         generic/arm/portio.c)
     list(APPEND ASM_SOURCE
         generic/arm/cache.s)

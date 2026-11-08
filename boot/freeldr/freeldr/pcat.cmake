@@ -141,13 +141,6 @@ elseif(ARCH STREQUAL "amd64")
         arch/i386/pc/pcvideo.c
         arch/hwpci.c)
 
-elseif(ARCH STREQUAL "arm")
-    list(APPEND PCATLDR_COMMON_ASM_SOURCE
-        arch/arm/boot.S)
-
-    list(APPEND PCATLDR_ARC_SOURCE
-        arch/arm/entry.c
-        arch/arm/macharm.c)
 else()
     #TBD
 endif()
