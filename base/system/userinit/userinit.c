@@ -538,6 +538,27 @@ Quit:
 }
 
 
+/* LIVESHELL in the boot options starts the shell without the livecd pages, for machines with no input */
+static BOOL
+LiveShellRequested(VOID)
+{
+    WCHAR Options[512];
+    DWORD Size = sizeof(Options) - sizeof(WCHAR);
+    HKEY hKey;
+    BOOL Found = FALSE;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control", 0, KEY_QUERY_VALUE, &hKey) != ERROR_SUCCESS)
+        return FALSE;
+    if (RegQueryValueExW(hKey, L"SystemStartOptions", NULL, NULL, (PBYTE)Options, &Size) == ERROR_SUCCESS)
+    {
+        Options[Size / sizeof(WCHAR)] = UNICODE_NULL;
+        _wcsupr(Options);
+        Found = (wcsstr(Options, L"LIVESHELL") != NULL);
+    }
+    RegCloseKey(hKey);
+    return Found;
+}
+
 int WINAPI
 wWinMain(IN HINSTANCE hInst,
          IN HINSTANCE hPrevInstance,
@@ -554,7 +575,7 @@ wWinMain(IN HINSTANCE hInst,
 Restart:
     SetUserSettings();
 
-    if (bIsLiveCD)
+    if (bIsLiveCD && !LiveShellRequested())
     {
         State.NextPage = LOCALEPAGE;
         State.Run = SHELL;
