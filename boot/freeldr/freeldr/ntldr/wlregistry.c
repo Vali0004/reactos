@@ -19,6 +19,9 @@ DBG_DEFAULT_CHANNEL(WINDOWS);
 // The only global var here, used to mark mem pages as NLS in WinLdrSetupMemoryLayout()
 ULONG TotalNLSSize = 0;
 
+/* why the last hive load failed, for the message box */
+static CHAR HiveFailure[160];
+
 static BOOLEAN
 WinLdrGetNLSNames(
     _In_ HKEY ControlSet,
@@ -69,6 +72,7 @@ WinLdrLoadSystemHive(
     if (Status != ESUCCESS)
     {
         WARN("Error while opening '%s', Status: %u\n", FullHiveName, Status);
+        RtlStringCbPrintfA(HiveFailure, sizeof(HiveFailure), "%s: open failed, status %u", FullHiveName, Status);
         *Reason = NoHive;
         return FALSE;
     }
@@ -78,6 +82,7 @@ WinLdrLoadSystemHive(
     if (Status != ESUCCESS)
     {
         WARN("Hive file has 0 size!\n");
+        RtlStringCbPrintfA(HiveFailure, sizeof(HiveFailure), "%s: no size, status %u", FullHiveName, Status);
         *Reason = CorruptHive;
         ArcClose(FileId);
         return FALSE;
@@ -92,6 +97,7 @@ WinLdrLoadSystemHive(
     if (HiveDataPhysical == NULL)
     {
         WARN("Could not alloc memory for hive!\n");
+        RtlStringCbPrintfA(HiveFailure, sizeof(HiveFailure), "%s: no memory for %lu bytes", FullHiveName, HiveFileSize);
         *Reason = NoHiveAlloc;
         ArcClose(FileId);
         return FALSE;
@@ -109,6 +115,7 @@ WinLdrLoadSystemHive(
     if (Status != ESUCCESS)
     {
         WARN("Error while reading '%s', Status: %u\n", FullHiveName, Status);
+        RtlStringCbPrintfA(HiveFailure, sizeof(HiveFailure), "%s: read of %lu bytes failed, status %u", FullHiveName, HiveFileSize, Status);
         *Reason = CorruptHive;
         ArcClose(FileId);
         return FALSE;
@@ -158,7 +165,7 @@ WinLdrInitSystemHive(
         }
 
         /* We are failing for other reason, bail out */
-        UiMessageBox("Could not load %s hive!", HiveName);
+        UiMessageBox("Could not load %s hive!\n%s", HiveName, HiveFailure);
         return FALSE;
     }
 
@@ -195,7 +202,7 @@ LoadAlternateHive:
         Success = WinLdrLoadSystemHive(LoaderBlock, SearchPath, HiveName, &Reason);
         if (!Success)
         {
-            UiMessageBox("Could not load %s hive!", HiveName);
+            UiMessageBox("Could not load %s hive!\n%s", HiveName, HiveFailure);
             return FALSE;
         }
 
