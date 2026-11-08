@@ -3,6 +3,7 @@ list(APPEND SOURCE
     enable.c
     palette.c
     pointer.c
+    rotate.c
     screen.c
     surface.c
     framebuf.h)

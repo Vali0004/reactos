@@ -197,6 +197,14 @@ IntInitScreenInfo(
    ppdev->ScreenDelta = SelectedMode->ScreenStride;
    ppdev->BitsPerPixel = (UCHAR)(SelectedMode->BitsPerPlane * SelectedMode->NumberOfPlanes);
 
+   /* the miniport reports a turned mode with its width and height swapped */
+   ppdev->Rotation = 0;
+   if (ppdev->BitsPerPixel == 32 &&
+       (SelectedMode->DriverSpecificAttributeFlags == 90 || SelectedMode->DriverSpecificAttributeFlags == 270))
+   {
+      ppdev->Rotation = SelectedMode->DriverSpecificAttributeFlags;
+   }
+
    ppdev->MemWidth = SelectedMode->VideoMemoryBitmapWidth;
    ppdev->MemHeight = SelectedMode->VideoMemoryBitmapHeight;
 

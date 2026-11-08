@@ -96,9 +96,19 @@ DrvEnableSurface(
    ScreenSize.cx = ppdev->ScreenWidth;
    ScreenSize.cy = ppdev->ScreenHeight;
 
-   hSurface = (HSURF)EngCreateBitmap(ScreenSize, ppdev->ScreenDelta, BitmapType,
-                                     (ppdev->ScreenDelta > 0) ? BMF_TOPDOWN : 0,
-                                     ppdev->ScreenPtr);
+   if (ppdev->Rotation)
+   {
+      /* GDI draws the turned desktop into memory, rotate.c puts each change on the panel */
+      ppdev->ShadowDelta = ppdev->ScreenWidth * sizeof(ULONG);
+      hSurface = (HSURF)EngCreateBitmap(ScreenSize, ppdev->ShadowDelta, BitmapType,
+                                        BMF_TOPDOWN | BMF_NOZEROINIT, NULL);
+   }
+   else
+   {
+      hSurface = (HSURF)EngCreateBitmap(ScreenSize, ppdev->ScreenDelta, BitmapType,
+                                        (ppdev->ScreenDelta > 0) ? BMF_TOPDOWN : 0,
+                                        ppdev->ScreenPtr);
+   }
    if (hSurface == NULL)
    {
       return NULL;
@@ -108,13 +118,25 @@ DrvEnableSurface(
     * Associate the surface with our device.
     */
 
-   if (!EngAssociateSurface(hSurface, ppdev->hDevEng, 0))
+   if (!EngAssociateSurface(hSurface, ppdev->hDevEng, ppdev->Rotation ? FB_ROTATE_HOOKS : 0))
    {
       EngDeleteSurface(hSurface);
       return NULL;
    }
 
    ppdev->hSurfEng = hSurface;
+
+   if (ppdev->Rotation)
+   {
+      ppdev->ShadowSurface = EngLockSurface(hSurface);
+      if (!ppdev->ShadowSurface)
+      {
+         EngDeleteSurface(hSurface);
+         ppdev->hSurfEng = NULL;
+         return NULL;
+      }
+      ppdev->ShadowBits = ppdev->ShadowSurface->pvScan0;
+   }
 
    return hSurface;
 }
@@ -136,6 +158,13 @@ DrvDisableSurface(
    DWORD ulTemp;
    VIDEO_MEMORY VideoMemory;
    PPDEV ppdev = (PPDEV)dhpdev;
+
+   if (ppdev->ShadowSurface)
+   {
+      EngUnlockSurface(ppdev->ShadowSurface);
+      ppdev->ShadowSurface = NULL;
+      ppdev->ShadowBits = NULL;
+   }
 
    EngDeleteSurface(ppdev->hSurfEng);
    ppdev->hSurfEng = NULL;
@@ -187,6 +216,13 @@ DrvAssertMode(
       if (ppdev->BitsPerPixel == 8)
       {
 	     IntSetPalette(dhpdev, ppdev->PaletteEntries, 0, 256);
+      }
+
+      /* the panel lost what was on it, the shadow still has the whole desktop */
+      if (ppdev->Rotation && ppdev->ShadowBits)
+      {
+         RECTL Whole = { 0, 0, (LONG)ppdev->ScreenWidth, (LONG)ppdev->ScreenHeight };
+         FbRotateRect(ppdev, &Whole);
       }
 
       return TRUE;

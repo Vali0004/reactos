@@ -34,6 +34,17 @@ static DRVFN DrvFunctionTable[] =
    {INDEX_DrvMovePointer, (PFN)DrvMovePointer},
    {INDEX_DrvEnableDirectDraw, (PFN)DrvEnableDirectDraw},
    {INDEX_DrvDisableDirectDraw, (PFN)DrvDisableDirectDraw},
+   /* only called on a turned desktop, see rotate.c */
+   {INDEX_DrvBitBlt, (PFN)DrvBitBlt},
+   {INDEX_DrvCopyBits, (PFN)DrvCopyBits},
+   {INDEX_DrvStretchBlt, (PFN)DrvStretchBlt},
+   {INDEX_DrvTransparentBlt, (PFN)DrvTransparentBlt},
+   {INDEX_DrvAlphaBlend, (PFN)DrvAlphaBlend},
+   {INDEX_DrvGradientFill, (PFN)DrvGradientFill},
+   {INDEX_DrvTextOut, (PFN)DrvTextOut},
+   {INDEX_DrvStrokePath, (PFN)DrvStrokePath},
+   {INDEX_DrvFillPath, (PFN)DrvFillPath},
+   {INDEX_DrvLineTo, (PFN)DrvLineTo},
 
 };
 

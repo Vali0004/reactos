@@ -183,6 +183,41 @@ GenFbVmpUnmapVideoMemory(
     return VideoPortUnmapMemory(HwDeviceExtension, VirtualAddress, ProcessHandle);
 }
 
+/* ROTATE=90 or ROTATE=270 in the boot options, the display driver turns the desktop by that much */
+static ULONG gRotation = 0;
+
+static VOID
+GenFbVmpReadRotation(VOID)
+{
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"SystemStartOptions");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UCHAR Buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + 512 * sizeof(WCHAR)];
+    PKEY_VALUE_PARTIAL_INFORMATION Info = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    HANDLE KeyHandle;
+    ULONG Length;
+    PWCHAR Options;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes)))
+        return;
+
+    RtlZeroMemory(Buffer, sizeof(Buffer));
+    Status = ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation,
+                             Info, sizeof(Buffer) - sizeof(WCHAR), &Length);
+    ZwClose(KeyHandle);
+    if (!NT_SUCCESS(Status) || Info->Type != REG_SZ)
+        return;
+
+    /* the loader stores the options upper case */
+    Options = (PWCHAR)Info->Data;
+    if (wcsstr(Options, L"ROTATE=270"))
+        gRotation = 270;
+    else if (wcsstr(Options, L"ROTATE=90"))
+        gRotation = 90;
+}
+
 static BOOLEAN
 GenFbVmpSetupCurrentMode(
     _In_ PGENFB_DEVICE_EXTENSION DeviceExtension)
@@ -305,6 +340,14 @@ GenFbVmpSetupCurrentMode(
         VideoMode->AttributeFlags |= VIDEO_MODE_PALETTE_DRIVEN;
 
     VideoMode->DriverSpecificAttributeFlags = 0;
+
+    /* a turned desktop is drawn turned by the display driver, it sees the mode the other way round */
+    if (gRotation && VideoData->BitsPerPixel == 32)
+    {
+        VideoMode->VisScreenWidth  = VideoData->ScreenHeight;
+        VideoMode->VisScreenHeight = VideoData->ScreenWidth;
+        VideoMode->DriverSpecificAttributeFlags = gRotation;
+    }
 
     /*
      * At startup, win32k.sys tries to select the best video mode by reading
@@ -1524,6 +1567,8 @@ DriverEntry(
     PsGetVersion(&OsMajorVersion, &OsMinorVersion, &OsBuildNumber, NULL);
     VideoDebugPrint((Info, "GenFbVmp: Running on NT %lu.%lu build %lu\n",
                      OsMajorVersion, OsMinorVersion, OsBuildNumber));
+
+    GenFbVmpReadRotation();
 
     /* Find boot-time framebuffer display information from the LoaderBlock */
     VideoPortZeroMemory(&gBootDisplay, sizeof(gBootDisplay));

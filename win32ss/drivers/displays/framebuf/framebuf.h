@@ -45,6 +45,11 @@ typedef struct _PDEV
    ULONG BlueMask;
    BYTE PaletteShift;
    PVOID ScreenPtr;
+   /* 90 or 270 when GDI draws into a turned shadow, see rotate.c */
+   ULONG Rotation;
+   SURFOBJ *ShadowSurface;
+   PVOID ShadowBits;
+   ULONG ShadowDelta;
    HPALETTE DefaultPalette;
    PALETTEENTRY *PaletteEntries;
 
@@ -81,6 +86,16 @@ DrvEnableDirectDraw(
 VOID APIENTRY
 DrvDisableDirectDraw(
     DHPDEV dhpdev);
+
+/* rotate.c */
+#define FB_ROTATE_HOOKS (HOOK_BITBLT | HOOK_COPYBITS | HOOK_STRETCHBLT | HOOK_TRANSPARENTBLT | \
+                         HOOK_ALPHABLEND | HOOK_GRADIENTFILL | HOOK_TEXTOUT | HOOK_STROKEPATH | \
+                         HOOK_FILLPATH | HOOK_LINETO)
+
+VOID
+FbRotateRect(
+   IN PPDEV ppdev,
+   IN RECTL *prcl);
 
 DHPDEV APIENTRY
 DrvEnablePDEV(
