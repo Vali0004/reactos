@@ -35,6 +35,9 @@ MiArmSyncL1(
     ULONG PdeIndex, Entry, i;
     PULONG L1;
 
+    /* the directory page doubles as the page table of the PTE_BASE window */
+    MiArmCleanTableEntry(PointerPde);
+
     /*
      * MmSystemPagePtes maps the system directory a second time, a store there
      * lands in the live directory too when it is the current one
@@ -57,7 +60,10 @@ MiArmSyncL1(
     {
         Entry = (PFN_FROM_PTE(PointerPde) << PAGE_SHIFT) | MI_ARM_L1_COARSE_TABLE;
         for (i = 0; i < (PDE_MAPPED_VA / _1MB); i++)
+        {
             L1[i] = Entry + (i * MI_ARM_COARSE_TABLE_SIZE);
+            MiArmCleanTableEntry(&L1[i]);
+        }
 
         /* nothing was cached for a range that faulted, the walker only needs to see the stores */
         __dsb(_ARM_BARRIER_ISHST);
@@ -66,7 +72,10 @@ MiArmSyncL1(
     else
     {
         for (i = 0; i < (PDE_MAPPED_VA / _1MB); i++)
+        {
             L1[i] = 0;
+            MiArmCleanTableEntry(&L1[i]);
+        }
 
         /* the range may have live translations, drop them everywhere */
         __dsb(_ARM_BARRIER_ISHST);

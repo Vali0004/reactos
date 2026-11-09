@@ -107,6 +107,11 @@ HalpMapPhysicalMemory(
     {
         TempPte.u.Hard.PageFrameNumber = Pfn + i;
         PointerPte[i] = TempPte;
+#ifdef _M_ARM
+        /* a walker that cannot snoop the data cache has to find the entry in memory */
+        if (((_MoveFromCoprocessor(15, 0, 0, 1, 7) >> 20) & 0xF) == 0)
+            _MoveToCoprocessor((ULONG_PTR)&PointerPte[i], 15, 0, 7, 10, 1);    /* DCCMVAC */
+#endif
     }
 
     /* New entries are never cached, the walker only has to see the stores */

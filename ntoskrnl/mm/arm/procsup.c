@@ -60,6 +60,7 @@ MiArmBuildL1(
     }
 
     /* the table walker reads memory, not the data cache it was written through */
+    KeInvalidateAllCaches();
     __dsb(_ARM_BARRIER_ISHST);
 }
 
@@ -126,6 +127,7 @@ MiArchCreateProcessAddressSpace(
                                 MM_READWRITE,
                                 PdeIndex);
     *PointerPte = PdePte;
+    MiArmCleanTableEntry(PointerPte);
     KeInvalidateTlbEntry(PteTable);
 
     /* Now get the page directory (which we'll double map, so call it a page table) */

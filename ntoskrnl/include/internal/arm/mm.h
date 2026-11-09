@@ -223,6 +223,22 @@ MiArchDeleteProcessAddressSpace(
     _In_ PEPROCESS Process);
 
 /* Mirrors a software PDE into the 4 first level entries of its range, mm/arm/l1.c */
+/* a walker that cannot snoop the data cache has to find table entries in memory, cortex-a8 is one */
+FORCEINLINE
+VOID
+MiArmCleanTableEntry(
+    _In_ PVOID Entry)
+{
+    ULONG Mmfr3;
+
+    __asm__ __volatile__("mrc p15, 0, %0, c0, c1, 7" : "=r" (Mmfr3));
+    if (((Mmfr3 >> 20) & 0xF) == 0)
+    {
+        _MoveToCoprocessor((ULONG_PTR)Entry, 15, 0, 7, 10, 1);    /* DCCMVAC */
+        __dsb(_ARM_BARRIER_ISHST);
+    }
+}
+
 VOID
 NTAPI
 MiArmSyncL1(

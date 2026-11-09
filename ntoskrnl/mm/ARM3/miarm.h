@@ -1090,6 +1090,7 @@ MI_WRITE_VALID_PTE(IN PMMPTE PointerPte,
 #elif defined(_M_ARM)
     __dsb(_ARM_BARRIER_ISHST);
     __isb(_ARM_BARRIER_SY);
+    MiArmCleanTableEntry(PointerPte);
     MI_ARM_SYNC_IF_PDE(PointerPte);
 #endif
 }
@@ -1108,6 +1109,7 @@ MI_UPDATE_VALID_PTE(IN PMMPTE PointerPte,
     ASSERT(PointerPte->u.Hard.PageFrameNumber == TempPte.u.Hard.PageFrameNumber);
     *PointerPte = TempPte;
 #ifdef _M_ARM
+    MiArmCleanTableEntry(PointerPte);
     MI_ARM_SYNC_IF_PDE(PointerPte);
 #endif
 }
@@ -1124,6 +1126,7 @@ MI_WRITE_INVALID_PTE(IN PMMPTE PointerPte,
     ASSERT(InvalidPte.u.Hard.Valid == 0);
     *PointerPte = InvalidPte;
 #ifdef _M_ARM
+    MiArmCleanTableEntry(PointerPte);
     MI_ARM_SYNC_IF_PDE(PointerPte);
 #endif
 }
@@ -1139,6 +1142,7 @@ MI_ERASE_PTE(IN PMMPTE PointerPte)
     ASSERT(PointerPte->u.Long != 0);
     PointerPte->u.Long = 0;
 #ifdef _M_ARM
+    MiArmCleanTableEntry(PointerPte);
     MI_ARM_SYNC_IF_PDE(PointerPte);
 #endif
 }
