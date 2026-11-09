@@ -47,6 +47,13 @@ static USHORT VidpYScale = 1;
 #endif
 static ULONG PanH, PanV;
 
+/* a portrait panel too narrow for the screen shows it turned clockwise */
+static BOOLEAN Portrait;
+
+#define FB_PORTRAIT_PIXEL(x, y) \
+    ((PULONG)((PUCHAR)FrameBufferStart + (PanH + (x)) * BytesPerScanLine) \
+             + (ScreenHeight - 1 - (PanV + (y))))
+
 static RGBQUAD CachedPalette[BV_MAX_COLORS];
 
 
@@ -64,6 +71,14 @@ DrawBackBufferRun(
     _In_ ULONG Count)
 {
     PUCHAR Line = FB_PIXEL(Left, Top);
+
+    if (Portrait)
+    {
+        PUCHAR Back = BB_PIXEL(Left, Top);
+        for (ULONG x = 0; x < Count; ++x, ++Back)
+            *FB_PORTRAIT_PIXEL(Left + x, Top) = CachedPalette[*Back];
+        return;
+    }
 
     for (ULONG i = VidpYScale; i > 0; --i, Line += BytesPerScanLine)
     {
@@ -169,7 +184,13 @@ VidInitialize(
     FrameBuffer.QuadPart = VramAddress.QuadPart + VideoConfigData.FrameBufferOffset;
     ScreenWidth  = VideoConfigData.ScreenWidth;
     ScreenHeight = VideoConfigData.ScreenHeight;
-    if (ScreenWidth < SCREEN_WIDTH || ScreenHeight < SCREEN_HEIGHT)
+    Portrait = FALSE;
+    if ((ScreenWidth < SCREEN_WIDTH || ScreenHeight < SCREEN_HEIGHT) &&
+        ScreenWidth >= SCREEN_HEIGHT && ScreenHeight >= SCREEN_WIDTH)
+    {
+        Portrait = TRUE;
+    }
+    else if (ScreenWidth < SCREEN_WIDTH || ScreenHeight < SCREEN_HEIGHT)
     {
         DPRINT1("Unsupported screen resolution!\n");
         return FALSE;
@@ -274,6 +295,14 @@ VidInitialize(
         }
     }
 
+    /* from here on the sizes are the turned ones */
+    if (Portrait)
+    {
+        ULONG Swap = ScreenWidth;
+        ScreenWidth = ScreenHeight;
+        ScreenHeight = Swap;
+    }
+
 #ifdef SCALING_SUPPORT
     /* Compute autoscaling; only integer (not fractional) scaling is supported */
     VidpXScale = ScreenWidth / SCREEN_WIDTH;
@@ -284,6 +313,8 @@ VidInitialize(
     VidpXScale = min(VidpXScale, VidpYScale);
     VidpYScale = VidpXScale;
 #endif
+    if (Portrait)
+        VidpXScale = VidpYScale = 1;
     DPRINT1("Scaling X = %hu, Y = %hu\n", VidpXScale, VidpYScale);
 #endif // SCALING_SUPPORT
 
@@ -366,6 +397,11 @@ SetPixel(
     PULONG Frame = (PULONG)FB_PIXEL(Left, Top);
 
     *Back = Color;
+    if (Portrait)
+    {
+        *FB_PORTRAIT_PIXEL(Left, Top) = CachedPalette[Color];
+        return;
+    }
     for (ULONG i = VidpYScale; i > 0; --i)
     {
         PULONG Pixel = Frame;
