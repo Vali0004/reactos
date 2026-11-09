@@ -33,6 +33,15 @@
 #define INTC_THRESHOLD_DISABLED     0xFF
 #define INTC_LINES                  96
 #define INTC_BANKS                  (INTC_LINES / 32)
+#define OMAP3_DEFAULT_SOFTWARE_LINE 93
+
+/* power and clock manager, wakeup domain */
+#define OMAP3_CM_BASE           0x48004000ULL
+#define CM_FCLKEN_WKUP          0xC00
+#define CM_ICLKEN_WKUP          0xC10
+#define CM_CLKSEL_WKUP          0xC40
+#define CM_EN_GPT1              0x1
+#define CM_CLKSEL_GPT1_SYS      0x1
 
 /* gp timer registers */
 #define GPT_TIOCP_CFG           0x010
@@ -60,6 +69,8 @@ typedef struct _OMAP3_INTC
 {
     PUCHAR Base;
     ULONG Threshold;
+    ULONG Enabled[INTC_BANKS];
+    UCHAR Priority[INTC_LINES];
     ULONG SoftwareLine[3];
 } OMAP3_INTC, *POMAP3_INTC;
 
@@ -107,6 +118,31 @@ Write32(
 
 /* interrupt controller */
 
+/* the hardware threshold stays off, lines at or below the current priority are masked here */
+static
+VOID
+IntcApplyMask(
+    _In_ POMAP3_INTC Data)
+{
+    ULONG Bank, Line, Allowed;
+
+    for (Bank = 0; Bank < INTC_BANKS; Bank++)
+    {
+        Allowed = 0;
+        for (Line = 0; Line < 32; Line++)
+        {
+            if ((Data->Enabled[Bank] & (1UL << Line)) &&
+                (Data->Priority[Bank * 32 + Line] > Data->Threshold))
+            {
+                Allowed |= 1UL << Line;
+            }
+        }
+
+        Write32(Data->Base, INTC_MIR_SET(Bank), ~Allowed);
+        Write32(Data->Base, INTC_MIR_CLEAR(Bank), Allowed);
+    }
+}
+
 static
 NTSTATUS
 IntcInitializeIoUnit(
@@ -124,13 +160,14 @@ IntcInitializeIoUnit(
     {
         Write32(Data->Base, INTC_MIR_SET(i), 0xFFFFFFFF);
         Write32(Data->Base, INTC_ISR_CLEAR(i), 0xFFFFFFFF);
+        Data->Enabled[i] = 0;
     }
 
     for (i = 0; i < INTC_LINES; i++)
         Write32(Data->Base, INTC_ILR(i), OMAP3_INTC_PRIORITY(0) << 2);
 
-    Data->Threshold = INTC_THRESHOLD_DISABLED;
-    Write32(Data->Base, INTC_THRESHOLD, Data->Threshold);
+    Data->Threshold = 0;
+    Write32(Data->Base, INTC_THRESHOLD, INTC_THRESHOLD_DISABLED);
     return STATUS_SUCCESS;
 }
 
@@ -166,11 +203,8 @@ IntcSetPriority(
 {
     POMAP3_INTC Data = ControllerData;
 
-    if (NewPriority > OMAP3_MAX_PRIORITY)
-        NewPriority = OMAP3_MAX_PRIORITY;
-
-    Data->Threshold = OMAP3_INTC_PRIORITY(NewPriority);
-    Write32(Data->Base, INTC_THRESHOLD, Data->Threshold);
+    Data->Threshold = (NewPriority > OMAP3_MAX_PRIORITY) ? OMAP3_MAX_PRIORITY : NewPriority;
+    IntcApplyMask(Data);
 }
 
 static
@@ -195,8 +229,8 @@ IntcAcceptAndGetSource(
 
     /* the line keeps its own level blocked until the end of interrupt */
     *OpaqueData = Data->Threshold;
-    Data->Threshold = (Read32(Data->Base, INTC_ILR(Active)) >> 2) & 0x3F;
-    Write32(Data->Base, INTC_THRESHOLD, Data->Threshold);
+    Data->Threshold = Data->Priority[Active];
+    IntcApplyMask(Data);
 
     /* software requests are edges the controller only latches in isr_set */
     for (i = 0; i < RTL_NUMBER_OF(Data->SoftwareLine); i++)
@@ -219,7 +253,7 @@ IntcEndOfInterrupt(
     POMAP3_INTC Data = ControllerData;
 
     Data->Threshold = OpaqueToken;
-    Write32(Data->Base, INTC_THRESHOLD, Data->Threshold);
+    IntcApplyMask(Data);
 }
 
 static
@@ -240,12 +274,15 @@ IntcSetLineState(
     {
         Priority = (NewState->Priority > OMAP3_MAX_PRIORITY) ? OMAP3_MAX_PRIORITY : NewState->Priority;
         Write32(Data->Base, INTC_ILR(Number), OMAP3_INTC_PRIORITY(Priority) << 2);
-        Write32(Data->Base, INTC_MIR_CLEAR(Number / 32), 1UL << (Number % 32));
+        Data->Priority[Number] = (UCHAR)Priority;
+        Data->Enabled[Number / 32] |= 1UL << (Number % 32);
     }
     else
     {
-        Write32(Data->Base, INTC_MIR_SET(Number / 32), 1UL << (Number % 32));
+        Data->Enabled[Number / 32] &= ~(1UL << (Number % 32));
     }
+
+    IntcApplyMask(Data);
 
     return STATUS_SUCCESS;
 }
@@ -428,6 +465,16 @@ RegisterInterruptController(
         Intc.SoftwareLine[i] = Info->SoftwareLine[i];
     }
 
+    /* a table that leaves them out would put every level on one line, the top three are unused */
+    if ((Intc.SoftwareLine[0] == Intc.SoftwareLine[1]) ||
+        (Intc.SoftwareLine[1] == Intc.SoftwareLine[2]) ||
+        (Intc.SoftwareLine[0] == Intc.SoftwareLine[2]))
+    {
+        Intc.SoftwareLine[0] = OMAP3_DEFAULT_SOFTWARE_LINE;
+        Intc.SoftwareLine[1] = OMAP3_DEFAULT_SOFTWARE_LINE + 1;
+        Intc.SoftwareLine[2] = OMAP3_DEFAULT_SOFTWARE_LINE + 2;
+    }
+
     RtlZeroMemory(&Block, sizeof(Block));
     Block.Header.TableVersion = INTERRUPT_INITIALIZATION_VERSION;
     Block.Header.TableSize = sizeof(Block);
@@ -480,7 +527,7 @@ RegisterTimers(
     TIMER_INITIALIZATION_BLOCK Block;
     PHYSICAL_ADDRESS Address;
     NTSTATUS Status;
-    PUCHAR CounterPage;
+    PUCHAR CounterPage, ClockPage;
 
     Address.QuadPart = Info->TimerBase;
     Timer.Base = HalImports->HalMapIoSpace(Address, 0x1000, MmNonCached);
@@ -488,6 +535,16 @@ RegisterTimers(
     CounterPage = HalImports->HalMapIoSpace(Address, 0x1000, MmNonCached);
     if (!Timer.Base || !CounterPage)
         return STATUS_INSUFFICIENT_RESOURCES;
+
+    /* as linux does for gpt1: interface and functional clocks on, 32k source when that is the rate */
+    Address.QuadPart = OMAP3_CM_BASE;
+    ClockPage = HalImports->HalMapIoSpace(Address, 0x1000, MmNonCached);
+    if (!ClockPage)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Write32(ClockPage, CM_ICLKEN_WKUP, Read32(ClockPage, CM_ICLKEN_WKUP) | CM_EN_GPT1);
+    if (Info->TimerFrequency == 32768)
+        Write32(ClockPage, CM_CLKSEL_WKUP, Read32(ClockPage, CM_CLKSEL_WKUP) & ~CM_CLKSEL_GPT1_SYS);
+    Write32(ClockPage, CM_FCLKEN_WKUP, Read32(ClockPage, CM_FCLKEN_WKUP) | CM_EN_GPT1);
     Counter.Register = (volatile ULONG *)(CounterPage + (Info->CounterBase & 0xFFF));
 
     Descriptor.Length = sizeof(Descriptor);
