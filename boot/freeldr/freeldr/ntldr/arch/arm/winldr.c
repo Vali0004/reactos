@@ -329,13 +329,7 @@ WinLdrpMapFrameBuffer(VOID)
     if (!VramAddress || !VramSize)
         return;
 
-    /* the console needs it one to one, which only fits where that cannot clash with kernel space */
-    if (!WinLdrpIdentityAllowed(VramAddress) || !WinLdrpIdentityAllowed(VramAddress + VramSize - 1))
-    {
-        WinLdrpTrace("freeldr: framebuffer %p is in kernel space, left unmapped\n", (PVOID)VramAddress);
-        return;
-    }
-
+    /* the console needs it one to one, the memory manager clears this again in kernel space */
     End = ALIGN_UP_BY(VramAddress + VramSize, MM_PAGE_SIZE);
     for (Address = ALIGN_DOWN_BY(VramAddress, MM_PAGE_SIZE); Address < End; Address += MM_PAGE_SIZE)
     {

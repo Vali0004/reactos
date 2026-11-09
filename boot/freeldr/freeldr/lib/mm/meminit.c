@@ -462,6 +462,10 @@ PFN_NUMBER MmGetAddressablePageCountIncludingHoles(VOID)
             MmArmRamBasePage = MemoryDescriptor->BasePage;
         }
     }
+    /* ram inside the KSEG0 range is mapped one to one, a higher base would break VaToPa */
+    if (MmArmRamBasePage >= (KSEG0_BASE >> MM_PAGE_SHIFT))
+        MmArmRamBasePage = KSEG0_BASE >> MM_PAGE_SHIFT;
+
     if (MmHighestPhysicalPage > MmArmRamBasePage + MM_ARM_KSEG0_PAGES)
     {
         ERR("RAM above %lx is out of reach for now\n", MmArmRamBasePage + MM_ARM_KSEG0_PAGES);
