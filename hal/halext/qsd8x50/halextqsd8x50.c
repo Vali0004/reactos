@@ -13,14 +13,14 @@
 
 /* GLOBALS *******************************************************************/
 
-/* vic registers, two banks of 32 lines, still to be checked on hardware */
+/* vic registers, two banks of 32 lines, scorpion layout as in linux mach-msm irq-vic.c */
 #define VIC_INT_SELECT(n)       (0x000 + (n) * 4)
 #define VIC_INT_ENCLEAR(n)      (0x020 + (n) * 4)
 #define VIC_INT_ENSET(n)        (0x030 + (n) * 4)
 #define VIC_INT_TYPE(n)         (0x040 + (n) * 4)
 #define VIC_INT_POLARITY(n)     (0x050 + (n) * 4)
-#define VIC_INT_MASTEREN        0x064
-#define VIC_CONFIG              0x068
+#define VIC_INT_MASTEREN        0x068
+#define VIC_CONFIG              0x06C
 #define VIC_IRQ_STATUS(n)       (0x080 + (n) * 4)
 #define VIC_INT_CLEAR(n)        (0x0B0 + (n) * 4)
 #define VIC_SOFTINT(n)          (0x0C0 + (n) * 4)
@@ -305,6 +305,7 @@ GptInitialize(
 
     Write32(Data->Base, GPT_ENABLE, 0);
     Write32(Data->Base, GPT_CLEAR, 0);
+    Write32(Data->Base, GPT_MATCH_VAL, 0xFFFFFFFF);
     return STATUS_SUCCESS;
 }
 
@@ -316,7 +317,6 @@ GptAcknowledgeInterrupt(
     UNREFERENCED_PARAMETER(TimerData);
 }
 
-/* the count clears on a match, so a match value is a period */
 static
 NTSTATUS
 GptArm(
@@ -329,11 +329,12 @@ GptArm(
     if (!TickCount || (TickCount > 0xFFFFFFFFULL))
         return STATUS_INVALID_PARAMETER;
 
-    Write32(Data->Base, GPT_ENABLE, 0);
-    Write32(Data->Base, GPT_CLEAR, 0);
-    Write32(Data->Base, GPT_MATCH_VAL, (ULONG)TickCount);
-    Write32(Data->Base, GPT_ENABLE,
-            TIMER_ENABLE_EN | ((Mode == TimerModeOneShot) ? 0 : TIMER_ENABLE_CLR_ON_MATCH));
+    UNREFERENCED_PARAMETER(Mode);
+
+    /* linux runs it free and moves the match ahead of the count, a match value is an alarm */
+    if (!(Read32(Data->Base, GPT_ENABLE) & TIMER_ENABLE_EN))
+        Write32(Data->Base, GPT_ENABLE, TIMER_ENABLE_EN);
+    Write32(Data->Base, GPT_MATCH_VAL, Read32(Data->Base, GPT_COUNT_VAL) + (ULONG)TickCount);
     return STATUS_SUCCESS;
 }
 
@@ -502,8 +503,8 @@ RegisterTimers(
     Block.InternalDataSize = sizeof(Timer);
     Block.CounterBitWidth = 32;
     Block.CounterFrequency = Info->GptFrequency;
-    /* arming resets the count, so the debug timer keeps time instead */
-    Block.Capabilities = TIMER_PERIODIC_CAPABLE | TIMER_ONE_SHOT_CAPABLE |
+    /* the debug timer keeps time, this one only raises the tick */
+    Block.Capabilities = TIMER_ONE_SHOT_CAPABLE |
                          TIMER_GENERATES_LINE_BASED_INTERRUPTS;
     Block.Interrupt.LegacyIrq = -1;
     Block.Interrupt.Gsi = (LONG)(Info->GsiBase + Info->GptLine);
