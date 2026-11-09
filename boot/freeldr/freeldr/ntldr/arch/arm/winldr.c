@@ -22,13 +22,8 @@
 #define PDR_BASE                    0xFFD00000
 #define VECTOR_BASE                 0xFFFF0000
 
-#ifdef _ZOOM2_
-#define IDMAP_BASE                  0x81000000
-#define MMIO_BASE                   0x10000000
-#else
 #define IDMAP_BASE                  0x00000000
 #define MMIO_BASE                   0x10000000
-#endif
 
 #define LowMemPageTableIndex        (IDMAP_BASE >> PDE_SHIFT)
 #define MmioPageTableIndex          (MMIO_BASE >> PDE_SHIFT)
@@ -38,13 +33,8 @@
 #define PdrPageTableIndex           (PDR_BASE >> PDE_SHIFT)
 #define VectorPageTableIndex        (VECTOR_BASE >> PDE_SHIFT)
 
-#ifndef _ZOOM2_
 PVOID MempPdrBaseAddress = (PVOID)0x70000;
 PVOID MempKernelBaseAddress = (PVOID)0;
-#else
-PVOID MempPdrBaseAddress = (PVOID)0x81100000;
-PVOID MempKernelBaseAddress = (PVOID)0x80000000;
-#endif
 
 /* Converts a Physical Address into a Page Frame Number */
 #define PaToPfn(p)                  ((p) >> PFN_SHIFT)
