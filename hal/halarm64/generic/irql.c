@@ -173,7 +173,11 @@ HalBeginSystemInterrupt(
         BOOLEAN Software = (Vector == APC_LEVEL) || (Vector == DISPATCH_LEVEL) || (Vector == IPI_LEVEL);
 
         if (Software || (Irql <= CurrentIrql))
+        {
+            /* ending it puts back the mask from before the raise above */
             HalpExtEndOfInterrupt();
+            HalpSetPriorityMask(KeGetPcr()->CurrentIrql);
+        }
 
         if (Irql > CurrentIrql)
             return TRUE;
