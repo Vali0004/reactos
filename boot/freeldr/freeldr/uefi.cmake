@@ -37,9 +37,7 @@ elseif(ARCH STREQUAL "amd64")
         arch/hwpci.c)
 elseif(ARCH STREQUAL "arm")
     list(APPEND UEFILDR_ARC_SOURCE
-        arch/arm/macharm.c
         arch/arm/debug.c)
-    #TBD
 elseif(ARCH STREQUAL "arm64")
     #TBD
 else()
