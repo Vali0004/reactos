@@ -373,6 +373,28 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     /* Convert nonpaged pool size from bytes to pages */
     MmMaximumNonPagedPoolInPages = MmMaximumNonPagedPoolInBytes >> PAGE_SHIFT;
 
+#ifdef _M_ARM
+    /* with ram at KSEG0_BASE the loader's one to one mappings land in kernel space, past the boot images */
+    for (StartPde = MiAddressToPde(MmSystemPteSpaceStart); StartPde < MiAddressToPde(MmPfnDatabase); StartPde++)
+    {
+        if (StartPde->u.Hard.Valid)
+        {
+            StartPde->u.Long = 0;
+            MiArmSyncL1(StartPde);
+        }
+    }
+
+    /* a framebuffer above the ram window was mapped one to one for the loader console */
+    for (StartPde = MiAddressToPde(NonPagedPoolExpansionVa); StartPde <= MiAddressToPde((PVOID)((ULONG_PTR)MmNonPagedPoolEnd - 1)); StartPde++)
+    {
+        if (StartPde->u.Hard.Valid)
+        {
+            StartPde->u.Long = 0;
+            MiArmSyncL1(StartPde);
+        }
+    }
+#endif
+
     //
     // Now we need some pages to create the page tables for the NP system VA
     // which includes the System PTE VA region (below the PFN DB)
@@ -442,6 +464,11 @@ MiInitMachineDependent(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         //
         StartPde++;
     }
+
+#ifdef _M_ARM
+    /* the tables just zeroed are still in the data cache */
+    KeInvalidateAllCaches();
+#endif
 
     MmSubsectionBase = (ULONG_PTR)MmNonPagedPoolStart;
 
